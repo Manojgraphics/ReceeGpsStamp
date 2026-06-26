@@ -596,6 +596,7 @@ fun StartRecceScreen(
                                     height = entry.height, onHeightChange = { setMedia(i, entry.copy(height = it)) },
                                     qty = entry.qty, onQtyChange = { setMedia(i, entry.copy(qty = it)) },
                                     unit = entry.unit, onUnitChange = { setMedia(i, entry.copy(unit = it)) },
+                                    onPickSize = { w, h -> setMedia(i, entry.copy(width = w, height = h, unit = "in")) },
                                     remark = entry.remark, onRemarkChange = { setMedia(i, entry.copy(remark = it)) },
                                     photos = entry.photos,
                                     onCameraClick = {
@@ -937,6 +938,9 @@ private fun MediaCard(
     height: String, onHeightChange: (String) -> Unit,
     qty: String, onQtyChange: (String) -> Unit,
     unit: String = "in", onUnitChange: (String) -> Unit = {},
+    // Sets width + height + unit in ONE update (a preset chip) — avoids the stale-entry race that
+    // breaks calling onWidthChange/onHeightChange/onUnitChange back-to-back.
+    onPickSize: (width: String, height: String) -> Unit = { _, _ -> },
     remark: String = "", onRemarkChange: (String) -> Unit = {},
     photos: List<String> = emptyList(),
     onCameraClick: () -> Unit = {},
@@ -1018,7 +1022,7 @@ private fun MediaCard(
                             Modifier.clip(RoundedCornerShape(8.dp))
                                 .background(if (active) AppYellow else Color.Transparent)
                                 .border(if (active) 0.dp else 1.dp, NeutralOutline, RoundedCornerShape(8.dp))
-                                .clickable { onWidthChange(w.toString()); onHeightChange(h.toString()); onUnitChange("in") }
+                                .clickable { onPickSize(w.toString(), h.toString()) }
                                 .padding(horizontal = 12.dp, vertical = 5.dp),
                         ) {
                             Text("$w × $h", fontSize = 13.sp, fontWeight = FontWeight.Medium, color = if (active) Color.Black else NeutralText)

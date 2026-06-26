@@ -482,6 +482,7 @@ private fun ShopDataItem(
     var open by remember { mutableStateOf(false) }
     var menuOpen by remember { mutableStateOf(false) }
     val photos = recce.shopPhotos.size + recce.media.sumOf { it.photos.size }
+    val ctx = androidx.compose.ui.platform.LocalContext.current
     Column(Modifier.fillMaxWidth()) {
         Row(
             Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp))
@@ -552,14 +553,34 @@ private fun ShopDataItem(
                 if (recce.remark.isNotBlank()) DetailLine("Remark: ${recce.remark}")
                 if (recce.lat != 0.0 || recce.lng != 0.0) DetailLine("Location: ${"%.5f".format(recce.lat)}, ${"%.5f".format(recce.lng)}")
                 Spacer(Modifier.height(6.dp))
-                // Share this store's details on WhatsApp.
-                Row(
-                    Modifier.clip(RoundedCornerShape(8.dp)).background(YellowContainer).clickable { onShare() }.padding(horizontal = 14.dp, vertical = 8.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Icon(RgsIcons.Share, null, tint = AppYellowDark, modifier = Modifier.size(15.dp))
-                    Spacer(Modifier.width(7.dp))
-                    Text("Share on WhatsApp", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = AppYellowDark)
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                    // Share this store's details on WhatsApp.
+                    Row(
+                        Modifier.clip(RoundedCornerShape(8.dp)).background(YellowContainer).clickable { onShare() }.padding(horizontal = 14.dp, vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Icon(RgsIcons.Share, null, tint = AppYellowDark, modifier = Modifier.size(15.dp))
+                        Spacer(Modifier.width(7.dp))
+                        Text("Share on WhatsApp", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = AppYellowDark)
+                    }
+                    // Open Google Maps directions to this recce's GPS — only when a location was captured.
+                    if (recce.lat != 0.0 || recce.lng != 0.0) {
+                        Row(
+                            Modifier.clip(RoundedCornerShape(8.dp)).background(YellowContainer)
+                                .clickable {
+                                    runCatching {
+                                        val uri = android.net.Uri.parse("https://www.google.com/maps/dir/?api=1&destination=${recce.lat},${recce.lng}")
+                                        ctx.startActivity(android.content.Intent(android.content.Intent.ACTION_VIEW, uri))
+                                    }
+                                }
+                                .padding(horizontal = 14.dp, vertical = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Icon(RgsIcons.Location, null, tint = AppYellowDark, modifier = Modifier.size(15.dp))
+                            Spacer(Modifier.width(7.dp))
+                            Text("Navigate", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = AppYellowDark)
+                        }
+                    }
                 }
             }
         }

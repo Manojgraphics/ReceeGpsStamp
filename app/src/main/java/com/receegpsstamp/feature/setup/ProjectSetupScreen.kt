@@ -102,6 +102,7 @@ fun ProjectSetupScreen(
     onAddShop: (name: String, city: String, contact: String) -> Unit = { _, _, _ -> },
     onImportShops: (String) -> Unit = {},
     onStartShop: (Shop) -> Unit = {},
+    onSetShopStatus: (Shop, String) -> Unit = { _, _ -> },
     installs: List<InstallEntry> = emptyList(),
     onOpenInstallShop: (String) -> Unit = {},
     onRefreshInstalls: () -> Unit = {},
@@ -286,17 +287,11 @@ fun ProjectSetupScreen(
                     }
 
                     Spacer(Modifier.height(4.dp))
+                    // Recce/Installation toggle lives in the Project Setup screen now; the main page just
+                    // shows the current mode's work-list. Switch mode in Setup (gear button).
                     val projInstalls = installs.filter { it.distributorId == (selectedDistributor?.id ?: "_") }
-                    Row(
-                        Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).background(NeutralSurfaceV).padding(3.dp),
-                        horizontalArrangement = Arrangement.spacedBy(3.dp),
-                    ) {
-                        SegTab("Recce", workMode == "recce", Modifier.weight(1f)) { workMode = "recce" }
-                        SegTab("Installation · ${projInstalls.size}", workMode == "install", Modifier.weight(1f)) { workMode = "install" }
-                    }
-                    Spacer(Modifier.height(6.dp))
                     if (workMode == "recce") {
-                        ShopsWorkList(shops = shops, onAddShop = { showAddShop = true }, onImport = { showImportShops = true }, onStartShop = onStartShop)
+                        ShopsWorkList(shops = shops, onAddShop = { showAddShop = true }, onImport = { showImportShops = true }, onStartShop = onStartShop, onSetStatus = onSetShopStatus)
                     } else {
                         InstallWorkList(projInstalls, onOpenShop = onOpenInstallShop)
                     }
@@ -352,6 +347,16 @@ fun ProjectSetupScreen(
                     leadingIcon = { Icon(RgsIcons.Add, null, tint = AppYellowDark, modifier = Modifier.size(18.dp)) },
                     onClick = { distributorDropdownOpen = false; showDistDialog = true },
                 )
+            }
+
+            SectionHeader("WORK MODE")
+            val setupInstalls = installs.filter { it.distributorId == (selectedDistributor?.id ?: "_") }
+            Row(
+                Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).background(NeutralSurfaceV).padding(3.dp),
+                horizontalArrangement = Arrangement.spacedBy(3.dp),
+            ) {
+                SegTab("Recce", workMode == "recce", Modifier.weight(1f)) { workMode = "recce" }
+                SegTab("Installation · ${setupInstalls.size}", workMode == "install", Modifier.weight(1f)) { workMode = "install" }
             }
 
             ChipSection("Creatives", RgsIcons.Edit, creatives.size, creativesOpen, { creativesOpen = !creativesOpen }) {
@@ -546,7 +551,7 @@ private fun EditableChipFlow(items: List<String>, onRemove: (String) -> Unit, on
 
 // ── Shops work-list — Pending / Done segments, search, rows, + Add shop ──
 @Composable
-private fun ShopsWorkList(shops: List<Shop>, onAddShop: () -> Unit, onImport: () -> Unit, onStartShop: (Shop) -> Unit) {
+private fun ShopsWorkList(shops: List<Shop>, onAddShop: () -> Unit, onImport: () -> Unit, onStartShop: (Shop) -> Unit, onSetStatus: (Shop, String) -> Unit) {
     var seg by remember { mutableStateOf(0) }      // 0 = Pending, 1 = Done
     var query by remember { mutableStateOf("") }
     val pending = shops.filter { it.status == "Pending" }.sortedBy { it.name.lowercase() }
@@ -556,6 +561,20 @@ private fun ShopsWorkList(shops: List<Shop>, onAddShop: () -> Unit, onImport: ()
         else base.filter { it.name.contains(query, ignoreCase = true) || it.city.contains(query, ignoreCase = true) }
 
     RgsCard {
+        // Survey progress — how many of this project's shops are done.
+        val total = shops.size
+        if (total > 0) {
+            val pct = done.size * 100 / total
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text("${done.size} / $total shops done", fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = NeutralText, modifier = Modifier.weight(1f))
+                Text("$pct%", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = AppYellowDark)
+            }
+            Spacer(Modifier.height(5.dp))
+            Box(Modifier.fillMaxWidth().height(6.dp).clip(RoundedCornerShape(50)).background(NeutralSurfaceV)) {
+                Box(Modifier.fillMaxWidth(done.size.toFloat() / total).height(6.dp).clip(RoundedCornerShape(50)).background(AppYellow))
+            }
+            Spacer(Modifier.height(10.dp))
+        }
         Row(
             Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).background(NeutralSurfaceV).padding(3.dp),
             horizontalArrangement = Arrangement.spacedBy(3.dp),
@@ -595,7 +614,7 @@ private fun ShopsWorkList(shops: List<Shop>, onAddShop: () -> Unit, onImport: ()
             )
         } else {
             list.forEachIndexed { i, s ->
-                ShopRow(s, pending = seg == 0, onStart = { onStartShop(s) })
+                ShopRow(s, pending = seg == 0, onStart = { onStartShop(s) }, onSetStatus = { st -> onSetStatus(s, st) })
                 if (i < list.size - 1) Box(Modifier.fillMaxWidth().height(0.5.dp).background(NeutralOutline.copy(alpha = 0.5f)))
             }
         }
@@ -738,7 +757,7 @@ private fun SegTab(label: String, sel: Boolean, mod: Modifier, onClick: () -> Un
 }
 
 @Composable
-private fun ShopRow(shop: Shop, pending: Boolean, onStart: () -> Unit) {
+private fun ShopRow(shop: Shop, pending: Boolean, onStart: () -> Unit, onSetStatus: (String) -> Unit) {
     Row(Modifier.fillMaxWidth().padding(vertical = 9.dp), verticalAlignment = Alignment.CenterVertically) {
         Box(Modifier.size(34.dp).clip(RoundedCornerShape(9.dp)).background(SoftChipGradient), contentAlignment = Alignment.Center) {
             Icon(RgsIcons.Store, null, tint = AppYellowDark, modifier = Modifier.size(17.dp))
@@ -750,6 +769,12 @@ private fun ShopRow(shop: Shop, pending: Boolean, onStart: () -> Unit) {
             if (sub.isNotBlank()) Text(sub, fontSize = 11.5.sp, color = NeutralTextSoft, maxLines = 1)
         }
         if (pending) {
+            // Skip — move out of pending without surveying (reversible via Revisit).
+            Text(
+                "Skip", fontSize = 12.5.sp, fontWeight = FontWeight.SemiBold, color = NeutralTextSoft,
+                modifier = Modifier.clip(RoundedCornerShape(8.dp)).clickable { onSetStatus("Skipped") }.padding(horizontal = 8.dp, vertical = 6.dp),
+            )
+            Spacer(Modifier.width(4.dp))
             Box(
                 Modifier.clip(RoundedCornerShape(8.dp)).background(BrandGradient).clickable { onStart() }
                     .padding(horizontal = 13.dp, vertical = 6.dp),
@@ -757,7 +782,15 @@ private fun ShopRow(shop: Shop, pending: Boolean, onStart: () -> Unit) {
                 Text("Start ›", fontSize = 12.5.sp, fontWeight = FontWeight.Bold, color = Color.Black)
             }
         } else {
-            Icon(RgsIcons.Check, null, tint = Color(0xFF1B873F), modifier = Modifier.size(18.dp))
+            // Revisit — send a done/skipped shop back to the pending list.
+            Text(
+                "Revisit", fontSize = 12.5.sp, fontWeight = FontWeight.SemiBold, color = AppYellowDark,
+                modifier = Modifier.clip(RoundedCornerShape(8.dp)).clickable { onSetStatus("Pending") }.padding(horizontal = 8.dp, vertical = 6.dp),
+            )
+            if (shop.status != "Skipped") {
+                Spacer(Modifier.width(4.dp))
+                Icon(RgsIcons.Check, null, tint = Color(0xFF1B873F), modifier = Modifier.size(18.dp))
+            }
         }
     }
 }

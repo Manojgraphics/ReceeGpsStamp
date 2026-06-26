@@ -297,6 +297,9 @@ class AppViewModel @Inject constructor(
         notify("Shop added")
     }
 
+    /** Work-list quick action — mark a shop "Skipped" (out of pending) or back to "Pending" (revisit). */
+    fun setShopStatus(shop: Shop, status: String) = localStore.updateShop(shop.copy(status = status))
+
     /** Bulk-import shops from pasted/CSV text — one per line, comma: Name[, City[, Contact]]. Dedupes by name. */
     fun importShops(raw: String) {
         if (distId.isEmpty()) { notify("Select a distributor first"); return }

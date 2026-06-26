@@ -890,6 +890,19 @@ fun AnnotateScreen(photoPath: String?, saveCleanCopy: Boolean = false, onDone: (
                         }
                         Spacer(Modifier.height(12.dp))
                     }
+                    if (isSize) {
+                        Text("STANDARD SIZES", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = Color.White.copy(0.45f), letterSpacing = 0.8.sp)
+                        Spacer(Modifier.height(6.dp))
+                        Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            listOf(24 to 48, 30 to 60, 36 to 72).forEach { (w, h) ->
+                                Box(
+                                    Modifier.clip(RoundedCornerShape(50)).background(Color(0xFF2C2C30))
+                                        .clickable { textValue = "$w × $h in" }.padding(horizontal = 12.dp, vertical = 7.dp),
+                                ) { Text("$w × $h", fontSize = 12.sp, color = Color.White) }
+                            }
+                        }
+                        Spacer(Modifier.height(12.dp))
+                    }
                     OutlinedTextField(
                         value = textValue, onValueChange = { textValue = it },
                         placeholder = { Text(if (isSize) "e.g. 4 ft × 3 ft" else "Type or pick a label", color = Color.White.copy(0.4f)) },

@@ -1007,6 +1007,23 @@ private fun MediaCard(
                 }
             }
 
+            // Standee standard-size quick-pick — one tap fills W×H (inches).
+            Text("Standard sizes (inches)", fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = NeutralTextSoft)
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(7.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                listOf(24 to 48, 30 to 60, 36 to 72).forEach { (w, h) ->
+                    val active = width == w.toString() && height == h.toString() && unit == "in"
+                    Box(
+                        Modifier.clip(RoundedCornerShape(8.dp))
+                            .background(if (active) AppYellow else Color.Transparent)
+                            .border(if (active) 0.dp else 1.dp, NeutralOutline, RoundedCornerShape(8.dp))
+                            .clickable { onWidthChange(w.toString()); onHeightChange(h.toString()); onUnitChange("in") }
+                            .padding(horizontal = 12.dp, vertical = 5.dp),
+                    ) {
+                        Text("$w × $h", fontSize = 13.sp, fontWeight = FontWeight.Medium, color = if (active) Color.Black else NeutralText)
+                    }
+                }
+            }
+
             Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
                 val decimalKb = androidx.compose.foundation.text.KeyboardOptions(keyboardType = androidx.compose.ui.text.input.KeyboardType.Decimal)
                 val numberKb = androidx.compose.foundation.text.KeyboardOptions(keyboardType = androidx.compose.ui.text.input.KeyboardType.Number)

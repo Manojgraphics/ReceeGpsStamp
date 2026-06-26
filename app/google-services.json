@@ -1,0 +1,63 @@
+{
+  "project_info": {
+    "project_number": "780665292973",
+    "project_id": "recee-gps-stamp",
+    "storage_bucket": "recee-gps-stamp.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:780665292973:android:1a86031ca76dd114f61e24",
+        "android_client_info": {
+          "package_name": "com.receegpsstamp"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "780665292973-g82qfuep1j38iguj6mpik9d1pdp52t3d.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.receegpsstamp",
+            "certificate_hash": "e7a6b864623855105fedad3ee1dadf951a5f5147"
+          }
+        },
+        {
+          "client_id": "780665292973-ij8o5dm6dgqj2m7dl7t4p0qh2ioeh8il.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.receegpsstamp",
+            "certificate_hash": "014cefe9bc5d2889b7c16a62179a53448efdc7ea"
+          }
+        },
+        {
+          "client_id": "780665292973-pvqlr3jkusir46ojmk3b90l2k7mv9614.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.receegpsstamp",
+            "certificate_hash": "386c812d763ed6ce6bb0c91e84aa3442c092c556"
+          }
+        },
+        {
+          "client_id": "780665292973-f5o6m2tu0dbjbfisjidm3a9oefquv80c.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDfBgHtpt2Xo04W5NvPm2d5G7t6cSkHxUY"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "780665292973-f5o6m2tu0dbjbfisjidm3a9oefquv80c.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

@@ -1,0 +1,44 @@
+# ── Android / Gradle build output ──
+build/
+.gradle/
+.kotlin/
+/captures/
+.externalNativeBuild/
+.cxx/
+
+# ── Local machine config (SDK path + signing passwords) — never commit ──
+local.properties
+
+# ── Signing keys & secrets — NEVER commit ──
+*.jks
+*.keystore
+*serviceAccount*.json
+*-service-account*.json
+.env
+.env.*
+
+# ── IDE ──
+.idea/
+*.iml
+.vscode/
+
+# ── OS junk ──
+.DS_Store
+Thumbs.db
+
+# ── Node (web dashboard / Cloud Functions) ──
+node_modules/
+
+# ── Firebase deploy cache (keep .firebaserc / firebase.json) ──
+.firebase/
+
+# ── Claude Code local tooling config ──
+.claude/
+
+# ── Packaged artifacts ──
+*.apk
+*.aab
+
+# NOTE: gradle/wrapper/gradle-wrapper.jar IS committed (CI needs it) — not matched above.
+# NOTE: app/google-services.json IS committed so the build works; if you later push this to a
+#       PUBLIC repo, move it to a CI secret instead.

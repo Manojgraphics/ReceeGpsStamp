@@ -1,0 +1,85 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ── Roles ──────────────────────────────────────────────────────────────
+    // ADMINS are hard-coded here (owners — cannot be removed from the UI, for safety).
+    // MANAGERS are dynamic: stored in /config/access and editable by admins in the dashboard.
+    function isAdmin() {
+      return request.auth != null && request.auth.token.email in [
+        'info4mediaearth@gmail.com'
+      ];
+    }
+    function managerEmails() {
+      return get(/databases/$(database)/documents/config/access).data.managers;
+    }
+    function isManager() {
+      return request.auth != null && (
+        isAdmin() ||
+        (exists(/databases/$(database)/documents/config/access) &&
+         request.auth.token.email in managerEmails())
+      );
+    }
+
+    // Access-control doc — any signed-in user may READ it (just an email list);
+    // only ADMINS may change who the managers are.
+    // Config docs (access list, targets, …) — any signed-in user reads; only admins write.
+    match /config/{doc} {
+      allow read:  if request.auth != null;
+      allow write: if isAdmin();
+    }
+
+    // Assignments — admins/managers assign shops to a surveyor; the surveyor's app reads its own.
+    match /assignments/{uid} {
+      allow read:  if request.auth != null && (request.auth.uid == uid || isManager());
+      allow write: if isManager();
+    }
+
+    // Audit log — managers/admins log actions; managers can read.
+    match /audit/{id} {
+      allow read:   if isManager();
+      allow create: if isManager();
+    }
+
+    // Expense approvals — managers approve/reject; the surveyor reads their own status.
+    match /approvals/{uid} {
+      allow read:  if request.auth != null && (request.auth.uid == uid || isManager());
+      allow write: if isManager();
+    }
+
+    // Vehicle registry — managers add/assign/service vehicles (the assigned vehicle is also
+    // stamped into the surveyor's own assignments doc, which the app already reads).
+    match /vehicles/{id} {
+      allow read, write: if isManager();
+    }
+
+    // Shared company fleet — managed on web + app (one source of truth). Any signed-in
+    // employee (surveyor app or manager web) may read/write the internal fleet.
+    match /fleet/{id} {
+      allow read, write: if request.auth != null;
+    }
+
+    // Shared project catalog (companies + distributors w/ creatives & media) — admin-managed,
+    // visible to every user. Any signed-in employee may read/write.
+    match /catalog/{doc} {
+      allow read, write: if request.auth != null;
+    }
+
+    // Installation/approval workflow — admins/managers approve recce'd shops, track install
+    // status + quality, export. Web-only (admin/manager).
+    match /installations/{id} {
+      allow read, write: if isManager();
+    }
+
+    // Each surveyor owns their backup; managers (and admins) can read everyone's.
+    match /users/{uid}/backup/{doc} {
+      allow read:  if request.auth != null && (request.auth.uid == uid || isManager());
+      allow write: if request.auth != null && request.auth.uid == uid;
+    }
+
+    // collectionGroup("backup") — one query pulls every surveyor for the dashboard.
+    match /{path=**}/backup/{doc} {
+      allow read: if isManager();
+    }
+  }
+}

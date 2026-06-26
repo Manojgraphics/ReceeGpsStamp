@@ -1,0 +1,33 @@
+# Detekt config for Recce GPS Stamp — builds upon the default rules.
+# Focus: catch unused imports/code & real bugs. Silence the noise that a Compose
+# UI codebase naturally produces (dp/sp literals, long @Composable functions, wildcard theme import).
+
+complexity:
+  active: false            # @Composable screens are long by nature
+
+naming:
+  active: false            # @Composable functions are PascalCase by convention
+
+comments:
+  active: false            # not enforcing KDoc on every public symbol
+
+style:
+  MagicNumber:
+    active: false          # dp/sp/colour literals everywhere
+  MaxLineLength:
+    active: false
+  WildcardImport:
+    active: false          # ui.theme.* is intentional
+  ReturnCount:
+    active: false
+  LoopWithTooManyJumpStatements:
+    active: false
+  # Kept ON (from defaults): UnusedImports, UnusedPrivateClass, UnusedPrivateMember, etc.
+
+exceptions:
+  # The app is offline-first and deliberately catches broadly so it can NEVER crash a field
+  # survey (see the comments at each catch site). These are by-design, not bugs.
+  TooGenericExceptionCaught:
+    active: false
+  SwallowedException:
+    active: false

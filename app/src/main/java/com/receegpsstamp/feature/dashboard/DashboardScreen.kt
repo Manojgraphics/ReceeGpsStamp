@@ -4,8 +4,6 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.animateIntAsState
 import androidx.compose.animation.core.tween
-import androidx.compose.ui.window.Dialog
-import androidx.compose.ui.window.DialogProperties
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
@@ -16,7 +14,6 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
@@ -87,7 +84,6 @@ fun DashboardScreen(
         androidx.activity.result.contract.ActivityResultContracts.OpenDocument(),
     ) { uri -> if (uri != null) onImportProject(uri) }
     // KPI drill-down: which tile was tapped ("stores" / "surveyed" / "interested"); null = closed.
-    var drill by remember { mutableStateOf<String?>(null) }
     Box(Modifier.fillMaxSize()) {
     Column(Modifier.fillMaxSize().background(NeutralBg).navigationBarsPadding()) {
         RgsTopBar(
@@ -108,7 +104,6 @@ fun DashboardScreen(
                 conversion = gConversion,
                 coverage = gCoverage,
                 interested = gInterested,
-                onKpi = { drill = it },
             )
 
             // Expenses balance — tap to open the Expense Manager.
@@ -151,30 +146,6 @@ fun DashboardScreen(
 
         }
     }
-        // KPI drill-down — a filtered list of stores; tap one to open/edit it.
-        drill?.let { f ->
-            val list = (if (f == "interested") allRecces.filter { it.status == "Interested" } else allRecces).sortedByDescending { it.createdAt }
-            val heading = when (f) { "interested" -> "Interested stores"; "surveyed" -> "Surveyed stores"; else -> "All stores" }
-            Dialog(onDismissRequest = { drill = null }, properties = DialogProperties(usePlatformDefaultWidth = false)) {
-                Column(Modifier.fillMaxWidth(0.92f).fillMaxHeight(0.82f).clip(RoundedCornerShape(16.dp)).background(NeutralBg)) {
-                    Row(Modifier.fillMaxWidth().background(BrandGrey).padding(horizontal = 14.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Text("$heading · ${list.size}", fontSize = 15.sp, fontWeight = FontWeight.Bold, color = Color.White, modifier = Modifier.weight(1f))
-                        Text(
-                            "Close", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = AppYellow,
-                            modifier = Modifier.clip(RoundedCornerShape(7.dp)).clickable { drill = null }.padding(horizontal = 8.dp, vertical = 4.dp),
-                        )
-                    }
-                    Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(10.dp)) {
-                        if (list.isEmpty()) {
-                            Text("Nothing here yet", fontSize = 12.5.sp, color = NeutralTextSoft, modifier = Modifier.padding(20.dp))
-                        } else {
-                            val byId = allShops.associateBy { it.id }
-                            list.forEach { r -> RecceRow(byId[r.shopId], r) { drill = null; onEditStore(r) } }
-                        }
-                    }
-                }
-            }
-        }
     }
 }
 
@@ -182,7 +153,6 @@ fun DashboardScreen(
 @Composable
 private fun OverviewHero(
     projects: Int, stores: Int, surveyed: Int, conversion: Int, coverage: Int, interested: Int,
-    onKpi: (String) -> Unit,
 ) {
     // Count-up animations so the numbers feel alive on load.
     val aProjects by animateIntAsState(projects, tween(700), label = "p")
@@ -202,16 +172,16 @@ private fun OverviewHero(
             Spacer(Modifier.width(9.dp))
             Column(Modifier.weight(1f)) {
                 Text("Overview", fontSize = 14.5.sp, fontWeight = FontWeight.Bold, color = Color.White)
-                Text("All projects · live · tap a tile", fontSize = 10.5.sp, color = Color.White.copy(0.55f))
+                Text("All projects · live", fontSize = 10.5.sp, color = Color.White.copy(0.55f))
             }
             DonutRing(conversion, label = "Convert")
         }
         Spacer(Modifier.height(14.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            KpiTile(RgsIcons.Project, "$aProjects", "Projects", AppYellow, Modifier.weight(1f)) { onKpi("stores") }
-            KpiTile(RgsIcons.Store, "$aStores", "Stores", Color(0xFF5DA9E9), Modifier.weight(1f)) { onKpi("stores") }
-            KpiTile(RgsIcons.Check, "$aSurveyed", "Surveyed", Color(0xFF59C28A), Modifier.weight(1f)) { onKpi("surveyed") }
-            KpiTile(RgsIcons.Camera, "$aInterested", "Interested", Color(0xFFE0A93B), Modifier.weight(1f)) { onKpi("interested") }
+            KpiTile(RgsIcons.Project, "$aProjects", "Projects", AppYellow, Modifier.weight(1f))
+            KpiTile(RgsIcons.Store, "$aStores", "Stores", Color(0xFF5DA9E9), Modifier.weight(1f))
+            KpiTile(RgsIcons.Check, "$aSurveyed", "Surveyed", Color(0xFF59C28A), Modifier.weight(1f))
+            KpiTile(RgsIcons.Camera, "$aInterested", "Interested", Color(0xFFE0A93B), Modifier.weight(1f))
         }
         Spacer(Modifier.height(12.dp))
         // Coverage bar — how much of all stores have been surveyed.
@@ -227,9 +197,9 @@ private fun OverviewHero(
 }
 
 @Composable
-private fun KpiTile(icon: ImageVector, value: String, label: String, accent: Color, mod: Modifier = Modifier, onClick: () -> Unit) {
+private fun KpiTile(icon: ImageVector, value: String, label: String, accent: Color, mod: Modifier = Modifier) {
     Column(
-        mod.clip(RoundedCornerShape(11.dp)).background(Color.White.copy(0.06f)).clickable { onClick() }.padding(vertical = 9.dp, horizontal = 8.dp),
+        mod.clip(RoundedCornerShape(11.dp)).background(Color.White.copy(0.06f)).padding(vertical = 9.dp, horizontal = 8.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         Icon(icon, null, tint = accent, modifier = Modifier.size(15.dp))

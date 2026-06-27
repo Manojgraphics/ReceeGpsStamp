@@ -1190,8 +1190,8 @@ async function renderFleet(){
   const ecArr=V.map(v=>({v,ec:vehEconomy(v),fulls:fullFills(v)})).filter(o=>o.ec>0&&o.fulls>=3).sort((a,b)=>b.ec-a.ec);
   const bestEc=ecArr[0];
   // This-month aggregates (km + fuel ₹ + service ₹ + ₹/km on total) — fleet-wide totals are legitimate (sum/sum, not average-of-averages)
-  const mAgg=V.reduce((a,v)=>{ const m=vehMonth(v); a.km+=m.km; a.fuel+=m.fuel; a.svc+=m.svc; a.lit+=m.litres; a.fills+=m.fills; return a; },{km:0,fuel:0,svc:0,lit:0,fills:0});
-  const avgCpk=mAgg.km>0?(mAgg.fuel+mAgg.svc)/mAgg.km:0;
+  const mAgg=V.reduce((a,v)=>{ const m=vehMonth(v); a.km+=m.km; a.fuel+=m.fuel; a.svc+=m.svc; a.docs+=m.docs; a.lit+=m.litres; a.fills+=m.fills; return a; },{km:0,fuel:0,svc:0,docs:0,lit:0,fills:0});
+  const avgCpk=mAgg.km>0?(mAgg.fuel+mAgg.svc+mAgg.docs)/mAgg.km:0;
   const allAlerts=[]; V.forEach(v=>vehAlerts(v).forEach(a=>allAlerts.push({v,a})));
   const expired=allAlerts.filter(o=>/EXPIRED|OVERDUE/.test(o.a)).length, due=allAlerts.length-expired;
   const kpi=(lbl,val,ic,sub,red)=>`<div class="card" style="padding:15px"><div style="display:flex;align-items:center;justify-content:space-between"><span style="font-size:11px;font-weight:800;letter-spacing:.4px;color:var(--soft)">${lbl}</span><span style="font-size:15px">${ic}</span></div><div style="font-size:28px;font-weight:800;margin-top:4px;color:${red?'var(--danger)':'var(--ink)'}">${val}</div><div style="font-size:11px;color:${red?'var(--danger)':'var(--brand-d)'};margin-top:2px">${sub}</div></div>`;
@@ -1218,8 +1218,8 @@ async function renderFleet(){
     <div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(160px,1fr))">
       ${kpi("VEHICLES",V.length,"🚙",`${bikes} bike${bikes===1?"":"s"} · ${fourw} four-wheel`)}
       ${kpi("KM · THIS MONTH",mAgg.km.toLocaleString("en-IN"),"📏",mAgg.km?`across ${V.length} vehicle${V.length===1?"":"s"}`:"no km logged")}
-      ${kpi("RUNNING ₹ · THIS MONTH",money(mAgg.fuel+mAgg.svc),"💸",`fuel ${money(mAgg.fuel)} · service ${money(mAgg.svc)}`)}
-      ${kpi("₹ / KM · AVG",avgCpk?"₹"+avgCpk.toFixed(2):"—","📉",avgCpk?"fuel + service this month":"need km + fuel")}
+      ${kpi("RUNNING ₹ · THIS MONTH",money(mAgg.fuel+mAgg.svc+mAgg.docs),"💸",`fuel ${money(mAgg.fuel)} · service ${money(mAgg.svc)}${mAgg.docs?" · docs "+money(mAgg.docs):""}`)}
+      ${kpi("₹ / KM · AVG",avgCpk?"₹"+avgCpk.toFixed(2):"—","📉",avgCpk?"fuel + service + docs this month":"need km + fuel")}
       ${kpi("BEST MILEAGE",bestEc?bestEc.ec.toFixed(1):"—","🏆",bestEc?esc(bestEc.v.number||bestEc.v.name)+" · km/l · "+bestEc.fulls+" full fills":"need ≥3 full fills per vehicle")}
       ${kpi("ALERTS",allAlerts.length,"⚠",allAlerts.length?`${expired} expired/overdue · ${due} due`:"all up to date",allAlerts.length>0)}
     </div>
@@ -1235,7 +1235,7 @@ async function renderFleet(){
           <div style="display:flex;gap:8px;margin-top:12px;background:var(--bg);border-radius:10px;padding:10px 6px">
             ${big((tm||ec)?(tm||ec).toFixed(1):"—","km/l "+(tm?"trip":"lifetime"),ec&&tm?"lifetime "+ec.toFixed(1):"","var(--brand-d)")}
             ${big(m.km?m.km.toLocaleString("en-IN"):"—","km this month",m.lit?m.lit.toFixed(1)+" L":"")}
-            ${big(m.cpk?"₹"+m.cpk.toFixed(2):"—","₹ / km · total",m.fuel||m.svc?`${money(m.fuel)} fuel${m.svc?" + "+money(m.svc)+" svc":""}`:"")}
+            ${big(m.cpk?"₹"+m.cpk.toFixed(2):"—","₹ / km · total",m.fuel||m.svc||m.docs?`${money(m.fuel)} fuel${m.svc?" + "+money(m.svc)+" svc":""}${m.docs?" + "+money(m.docs)+" docs":""}`:"")}
           </div>
           ${drop?`<div style="margin-top:8px;background:#FBEAE5;color:var(--danger);border-radius:8px;padding:7px 10px;font-size:11.5px;font-weight:700">⚠ Mileage dropped ${drop}% on last tank — possible fuel theft / engine issue</div>`:""}
           <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:10px">${docPill("INS",v.insuranceExpiry)}${docPill("PUC",v.pucExpiry)}${docPill("FIT",v.fitnessExpiry,typeNeedsFitness(v.type))}</div>
@@ -1398,9 +1398,11 @@ function vehMonth(v){ const now=new Date(), mStart=new Date(now.getFullYear(),no
   let km=0; if(logs.length){ const last=logs[logs.length-1].odometer; const earlier=all.filter(f=>f.odometer<=logs[0].odometer); const start=earlier.length?earlier[earlier.length-1].odometer:logs[0].odometer; km=Math.max(0,last-start); }
   const svcLogs=(v.serviceLogs||[]).filter(s=>(s.date||0)>=mStart);
   const svc=svcLogs.reduce((a,b)=>a+(b.amount||0),0);
-  const total=fuel+svc;
+  const docLogs=(v.docRenewals||[]).filter(d=>(d.date||0)>=mStart);
+  const docs=docLogs.reduce((a,b)=>a+(b.amount||0),0);
+  const total=fuel+svc+docs;
   const cpk=km>0?total/km:0, cpkFuel=km>0?fuel/km:0;
-  return {km,fuel,svc,total,litres,cpk,cpkFuel,fills:logs.length,svcCount:svcLogs.length};
+  return {km,fuel,svc,docs,total,litres,cpk,cpkFuel,fills:logs.length,svcCount:svcLogs.length,docsCount:docLogs.length};
 }
 // Mileage-drop flag: latest tank << lifetime by 20%+ (and we have ≥3 fills total) — early warning for fuel theft / engine issues.
 function vehMileageDrop(v){ const ec=vehEconomy(v), tm=vehTripMileage(v); if(ec>0&&tm>0&&(v.fuelLogs||[]).length>=3&&tm<ec*0.8) return Math.round((1-tm/ec)*100); return 0; }
@@ -1433,10 +1435,20 @@ function openVehicle(v){
   const m=$("#modal"); m.classList.remove("hidden");
   const fuelN=(v.fuelLogs||[]).length, svcN=(v.serviceLogs||[]).length;
   const tab=(k,l)=>{ const on=_vTab===k; return `<button class="vTab" data-t="${k}" style="background:${on?'var(--brand)':'transparent'};color:${on?'var(--brand-text)':'var(--soft)'};border-radius:50px;padding:7px 16px;font-size:12.5px;font-weight:700;cursor:pointer;border:none">${l}</button>`; };
+  const docRows=[["insurance","Insurance",v.insuranceExpiry,true],["puc","PUC",v.pucExpiry,true],["fitness","Fitness",v.fitnessExpiry,typeNeedsFitness(v.type)]];
+  const renewals=(v.docRenewals||[]).slice().sort((a,b)=>(b.date||0)-(a.date||0));
+  const renewLabel={insurance:"Insurance",puc:"PUC",fitness:"Fitness"};
   const overviewHtml=`
     ${(v.chassis||v.engine||(v.lat&&v.lng))?`<div class="tablewrap" style="margin-top:0"><table><tr><th>Chassis</th><th>Engine</th><th>Last location</th></tr><tr><td>${esc(v.chassis||"—")}</td><td>${esc(v.engine||"—")}</td><td>${(v.lat&&v.lng)?`<a href="https://maps.google.com/?q=${v.lat},${v.lng}" target="_blank">📍 Map</a>`:"—"}</td></tr></table></div>`:""}
     <div class="sec">DOCUMENTS</div>
-    <div class="tablewrap"><table><tr><th>Insurance</th><th>PUC</th>${typeNeedsFitness(v.type)?`<th>Fitness</th>`:``}<th>Next service due</th></tr><tr><td>${docTxt(v.insuranceExpiry)}</td><td>${docTxt(v.pucExpiry)}</td>${typeNeedsFitness(v.type)?`<td>${docTxt(v.fitnessExpiry)}</td>`:``}<td>${nextSvc?docTxt(nextSvc):'<span style="color:var(--soft)">not set</span>'}</td></tr></table></div>
+    <div class="tablewrap"><table><tr><th>Document</th><th>Status</th><th></th></tr>
+      ${docRows.filter(r=>r[3]).map(([k,lbl,e])=>`<tr><td><b>${esc(lbl)}</b></td><td>${docTxt(e)}</td><td style="white-space:nowrap"><button class="btn vDocRenew" data-k="${k}" style="padding:5px 11px;font-size:11.5px;background:#FFF6DC;color:var(--brand-d);border:none;font-weight:700" title="Log a renewal payment + extend expiry">💰 Renew</button></td></tr>`).join("")}
+      <tr><td><b>Next service due</b></td><td>${nextSvc?docTxt(nextSvc):'<span style="color:var(--soft)">not set</span>'}</td><td style="color:var(--soft);font-size:11px">from service logs</td></tr>
+    </table></div>
+    ${renewals.length?`<div class="sec">📄 RECENT DOC RENEWALS · ${money(renewals.reduce((a,b)=>a+(b.amount||0),0))} lifetime</div>
+      <div class="tablewrap"><table><tr><th>Date</th><th>Type</th><th>₹</th><th>New expiry</th><th>Receipt</th><th>Note</th><th></th></tr>
+        ${renewals.map(r=>`<tr><td>${fmtDate(r.date)}</td><td><b>${esc(renewLabel[r.type]||r.type)}</b></td><td>${money(r.amount||0)}</td><td>${r.newExpiry?fmtDate(r.newExpiry):"—"}</td><td>${r.receiptPhoto?`<span class="vDocRcpt" data-p="${esc(r.receiptPhoto)}" title="View receipt" style="cursor:pointer;color:var(--brand-d)">${/\.pdf$/i.test(r.receiptPhoto)?"📄":"📷"}</span>`:"—"}</td><td class="wrap" style="font-size:11.5px;color:var(--soft)">${esc(r.note||"")}</td><td style="white-space:nowrap"><span class="vDocEdit" data-id="${esc(r.id||"")}" title="Edit entry" style="color:var(--brand-d);cursor:pointer;font-weight:700;margin-right:10px">✏️</span><span class="vDocDel" data-id="${esc(r.id||"")}" title="Delete entry" style="color:var(--danger);cursor:pointer;font-weight:700">✕</span></td></tr>`).join("")}
+      </table></div>`:""}
     <div class="filters" style="margin-top:14px"><button class="btn y" id="vFuel">⛽ Add fuel</button><button class="btn" id="vSvc">🔧 Add service</button><span style="font-size:11px;color:var(--soft);align-self:center;margin-left:auto">Edit vehicle details from <b>Manage vehicles</b></span></div>`;
   const fuelHtml=`
     <div style="display:flex;align-items:center;margin-bottom:10px"><b style="font-size:14.5px">Fuel log</b><span style="margin-left:auto;font-size:12px;color:var(--soft)">${fuelN} entr${fuelN===1?"y":"ies"}</span><button class="btn y" id="vFuel" style="margin-left:10px">⛽ Add fuel</button></div>
@@ -1471,6 +1483,11 @@ function openVehicle(v){
   document.querySelectorAll("#modal .vTab").forEach(b=>b.onclick=()=>{ _vTab=b.dataset.t; openVehicle(v); });
   { const fb=$("#vFuel"); if(fb) fb.onclick=()=>fuelForm(v); }
   { const sb=$("#vSvc"); if(sb) sb.onclick=()=>serviceForm(v); }
+  // Documents renew + receipt view + edit/delete past renewals
+  m.querySelectorAll(".vDocRenew").forEach(b=>b.onclick=()=>docRenewForm(v,b.dataset.k));
+  m.querySelectorAll(".vDocRcpt").forEach(b=>b.onclick=async()=>{ try{ const u=await getDownloadURL(ref(storage,b.dataset.p)); window.open(u,"_blank"); }catch(e){ alert("Couldn't open receipt: "+(e.message||e)); } });
+  m.querySelectorAll(".vDocEdit").forEach(b=>b.onclick=()=>{ const r=(v.docRenewals||[]).find(x=>x.id===b.dataset.id); if(r) docRenewForm(v,r.type,r); });
+  m.querySelectorAll(".vDocDel").forEach(b=>b.onclick=async()=>{ const id=b.dataset.id; if(!id) return; if(!confirm("Delete this renewal entry? (The expiry date on the document stays as it is.)")) return; const updated=(v.docRenewals||[]).filter(x=>x.id!==id); try{ await setDoc(doc(db,"fleet",v.id),{docRenewals:updated,updatedAt:Date.now()},{merge:true}); logAudit("vehicle",`Deleted doc renewal for ${v.name||v.number}`); v.docRenewals=updated; openVehicle(v); renderFleet(); }catch(e){ alert(e.message||e); } });
   // Per-log delete — fuel / service entry by id.
   m.querySelectorAll(".logDel").forEach(b=>b.onclick=async()=>{
     const kind=b.dataset.kind, id=b.dataset.id; if(!id) return;
@@ -1596,6 +1613,39 @@ function fuelForm(v, edit){
     await upload("flOdoPic","odo"); await upload("flStnPic","station"); await upload("flSlipPic","slip");
     const logs=edit?(v.fuelLogs||[]).map(x=>x.id===edit.id?log:x):[...(v.fuelLogs||[]),log];
     try{ await setDoc(doc(db,"fleet",v.id),{fuelLogs:logs,currentKm:Math.max(odo,v.currentKm||0),updatedAt:Date.now()},{merge:true}); logAudit("vehicle",`${edit?"Edited fuel":"Fuel"} ${odo}km for ${v.name||v.number}`); v.fuelLogs=logs; v.currentKm=Math.max(odo,v.currentKm||0); openVehicle(v); renderFleet(); }catch(e){ alert(e.message||e); btn.disabled=false; btn.textContent=_t; } };
+}
+// Log a document renewal (PUC / Fitness / Insurance) — appends to docRenewals + extends the expiry.
+function docRenewForm(v, type, edit){
+  const labels={insurance:"Insurance",puc:"PUC",fitness:"Fitness"};
+  const lbl=labels[type]||type;
+  const m=$("#modal"); m.classList.remove("hidden");
+  const today=new Date(); const fd=edit?new Date(edit.date||Date.now()):today;
+  const curExp=v[type+"Expiry"]||0;
+  // default new expiry: +1 year from today (or from current expiry if it's in the future)
+  const defaultNew=edit&&edit.newExpiry ? new Date(edit.newExpiry) : new Date(Math.max(Date.now(),curExp)+365*86400000);
+  m.innerHTML=`<div class="modalbox"><h3 style="margin:0 0 4px">${edit?"✏️ Edit":"💰 Renew"} ${esc(lbl)} — ${esc(v.name||v.number)}</h3>
+    <div style="font-size:12px;color:var(--soft);margin-bottom:10px">${curExp?`Current expiry: <b>${new Date(curExp).toLocaleDateString("en-IN")}</b>`:`Not set yet`} · saving updates the document's expiry on this vehicle.</div>
+    <div class="filters"><input type="date" id="drDate" value="${fd.toISOString().slice(0,10)}" title="Payment date"><input type="number" id="drAmt" placeholder="Amount ₹" value="${edit?(edit.amount||""):""}"><input type="date" id="drNew" value="${defaultNew.toISOString().slice(0,10)}" title="New expiry date"></div>
+    <div class="filters" style="margin-top:8px"><input type="text" id="drNote" placeholder="Note (e.g. RTO office, agent, period)" value="${edit?esc(edit.note||""):""}" style="flex:1"></div>
+    <div class="filters" style="margin-top:8px;align-items:center"><span style="font-size:11px;color:var(--soft);font-weight:700">📷 Receipt</span><input type="file" id="drRcpt" accept="image/*,application/pdf" style="font-size:12px">${edit&&edit.receiptPhoto?'<span style="font-size:11px;color:#1B873F;font-weight:700">✓ saved · pick to replace</span>':''}</div>
+    <div style="text-align:right;margin-top:12px"><button class="btn" id="drCancel">Cancel</button> <button class="btn y" id="drSave">${edit?"Update":"Save"}</button></div></div>`;
+  m.onclick=ev=>{ if(ev.target===m) m.classList.add("hidden"); };
+  $("#drCancel").onclick=()=>m.classList.add("hidden");
+  $("#drSave").onclick=async()=>{ const btn=$("#drSave"); btn.disabled=true; const _t=btn.textContent; btn.textContent="Saving…";
+    const id=edit?edit.id:fleetRid();
+    const dStr=$("#drDate").value, date=dStr?new Date(dStr+"T12:00:00").getTime():Date.now();
+    const newStr=$("#drNew").value, newExpiry=newStr?new Date(newStr+"T00:00:00").getTime():0;
+    const amt=parseFloat($("#drAmt").value)||0;
+    if(!amt && !confirm("Save with ₹0 amount?")){ btn.disabled=false; btn.textContent=_t; return; }
+    if(!newExpiry){ alert("Pick a new expiry date"); btn.disabled=false; btn.textContent=_t; return; }
+    let receiptPhoto=edit?(edit.receiptPhoto||""):""; const rf=$("#drRcpt").files[0];
+    if(rf){ const ext=((rf.name.split(".").pop()||"").toLowerCase().replace(/[^a-z0-9]/g,""))||"jpg"; const path=`fleet/${v.id}/docs/${id}.${ext}`; try{ await uploadBytes(ref(storage,path),rf); receiptPhoto=path; }catch(e){ alert("Receipt upload failed: "+(e.message||e)); } }
+    const entry={id,type,date,amount:amt,newExpiry,receiptPhoto,note:$("#drNote").value.trim()};
+    const renewals=edit?(v.docRenewals||[]).map(x=>x.id===edit.id?entry:x):[...(v.docRenewals||[]),entry];
+    const patch={docRenewals:renewals,updatedAt:Date.now()};
+    patch[type+"Expiry"]=newExpiry; // extend the doc expiry on the vehicle
+    try{ await setDoc(doc(db,"fleet",v.id),patch,{merge:true}); logAudit("vehicle",`${edit?"Edited":"Renewed"} ${lbl} for ${v.name||v.number} → ${new Date(newExpiry).toLocaleDateString("en-IN")} (₹${amt})`); v.docRenewals=renewals; v[type+"Expiry"]=newExpiry; m.classList.add("hidden"); openVehicle(v); renderFleet(); }catch(e){ alert(e.message||e); btn.disabled=false; btn.textContent=_t; }
+  };
 }
 // Quick-mark a single maintenance item done @ current km — no form, single Firestore write.
 async function markMaintDone(v, itemName){

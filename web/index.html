@@ -876,7 +876,7 @@ function renderMap(){
 }
 
 // ── Fleet (fuel + distance + route trail, from real recce GPS + expenses) ──
-let _fleetMap=null;
+let _fleetMap=null, _fleetView="vehicles";
 const haversine=(a,b)=>{ const R=6371,r=x=>x*Math.PI/180; const dLat=r(b.lat-a.lat),dLng=r(b.lng-a.lng); const s=Math.sin(dLat/2)**2+Math.cos(r(a.lat))*Math.cos(r(b.lat))*Math.sin(dLng/2)**2; return 2*R*Math.asin(Math.sqrt(s)); };
 function surveyorDistance(uid){
   const pts=fRecces().filter(x=>x.uid===uid&&x.lat&&x.lng).sort((a,b)=>a.date-b.date);
@@ -891,28 +891,35 @@ function renderFleet(){
   const rows=surs.map(s=>{ const fuel=cost(s.uid,fuelCats), driver=cost(s.uid,driverCats), travel=cost(s.uid,travelCats), km=surveyorDistance(s.uid);
     return {...s, fuel, driver, travel, km, cpk:km?fuel/km:0, cps:s.surveyed?(fuel+travel)/s.surveyed:0}; }).filter(r=>r.fuel||r.km||r.driver||r.travel);
   const totalFuel=rows.reduce((a,r)=>a+r.fuel,0), totalKm=rows.reduce((a,r)=>a+r.km,0), totalDriver=rows.reduce((a,r)=>a+r.driver,0);
-  $("#fleet").innerHTML=`
-    <div class="sec">🚚 FLEET ${RANGE.label!=="All time"?"· "+esc(RANGE.label):""}</div>
-    <div class="sec">🚗 COMPANY VEHICLES — live, shared with the app</div>
-    <div class="filters"><button class="btn y" id="vAdd">+ Add vehicle</button><span style="font-size:12px;color:var(--soft)">Vehicles + fuel/service logs added in the app appear here automatically.</span></div>
-    <div id="vehList"><div class="loading">Loading vehicles…</div></div>
-    <div class="sec" style="margin-top:20px">⛽ FUEL & TRAVEL COST — BY FIELD USER ${RANGE.label!=="All time"?"· "+esc(RANGE.label):""}</div>
-    <div class="grid">${stat("Fuel spend",money(totalFuel),'hero')}${stat("Distance",Math.round(totalKm)+" km")}${stat("Cost / km",totalKm?money(totalFuel/totalKm):"—")}${stat("Driver + wages",money(totalDriver))}</div>
-    <div class="tablewrap"><table><tr><th>Field User</th><th>Fuel</th><th>Distance</th><th>Cost/km</th><th>Driver+wages</th><th>Cost/shop</th></tr>
-      ${rows.sort((a,b)=>b.fuel-a.fuel).map(r=>`<tr><td><b>${esc(r.name)}</b></td><td>${money(r.fuel)}</td><td>${Math.round(r.km)} km</td><td>${r.km?money(r.cpk):"—"}</td><td>${money(r.driver)}</td><td>${r.surveyed?money(r.cps):"—"}</td></tr>`).join("")||`<tr><td colspan="6" style="color:var(--soft);padding:14px">No fuel/travel/GPS data in this period.</td></tr>`}
-    </table></div>
-    <div class="sec">🗺️ MAP — 🚗 vehicle last-seen (from fuel/service GPS) + field-user route trail</div>
-    <div class="filters"><select id="flSur"><option value="">Select field user…</option>${surs.map(s=>`<option value="${esc(s.uid)}">${esc(s.name)}</option>`).join("")}</select><span style="font-size:12px;color:var(--soft)">Tip: set PERIOD to "Today" for one day's path</span></div>
-    <div class="card" style="padding:0;overflow:hidden"><div id="fleetmap" style="height:420px"></div></div>
-    <div style="font-size:11.5px;color:var(--soft);margin-top:7px">Distance = straight-line between consecutive shops (GPS) — approximate, not road distance.</div>`;
-  $("#flSur").onchange=()=>drawTrail($("#flSur").value);
-  $("#vAdd").onclick=()=>vehicleForm(null); drawFleet();
-  setTimeout(()=>{ try{ if(_fleetMap){ _fleetMap.remove(); _fleetMap=null; } }catch(e){}
-    _fleetMap=L.map("fleetmap"); L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",{attribution:"© OpenStreetMap",maxZoom:19}).addTo(_fleetMap); _fleetMap.setView([20.59,78.96],5);
-    const vm=FLEET.filter(v=>v.lat&&v.lng);
-    vm.forEach(v=>{ L.marker([v.lat,v.lng]).addTo(_fleetMap).bindPopup(`🚗 <b>${esc(v.name||v.number||"Vehicle")}</b><br>${esc([v.number,v.model].filter(Boolean).join(" · "))}`); });
-    if(vm.length) _fleetMap.setView([vm[0].lat,vm[0].lng], vm.length>1?7:13);
-  },60);
+  const sub=`<div class="sec">🚚 FLEET ${RANGE.label!=="All time"?"· "+esc(RANGE.label):""}</div>
+    <div class="filters" style="gap:6px;margin-bottom:6px"><button class="btn ${_fleetView==='vehicles'?'y':''}" data-fv="vehicles">🚗 Vehicles</button><button class="btn ${_fleetView==='map'?'y':''}" data-fv="map">🗺️ Map</button></div>`;
+  if(_fleetView==='map'){
+    $("#fleet").innerHTML=sub+`
+      <div class="sec">🗺️ MAP — 🚗 vehicle last-seen (from fuel/service GPS) + field-user route trail</div>
+      <div class="filters"><select id="flSur"><option value="">Select field user…</option>${surs.map(s=>`<option value="${esc(s.uid)}">${esc(s.name)}</option>`).join("")}</select><span style="font-size:12px;color:var(--soft)">Tip: set PERIOD to "Today" for one day's path</span></div>
+      <div class="card" style="padding:0;overflow:hidden"><div id="fleetmap" style="height:560px"></div></div>
+      <div style="font-size:11.5px;color:var(--soft);margin-top:7px">Distance = straight-line between consecutive shops (GPS) — approximate, not road distance.</div>`;
+    document.querySelectorAll("[data-fv]").forEach(b=>b.onclick=()=>{ _fleetView=b.dataset.fv; renderFleet(); });
+    $("#flSur").onchange=()=>drawTrail($("#flSur").value);
+    setTimeout(()=>{ try{ if(_fleetMap){ _fleetMap.remove(); _fleetMap=null; } }catch(e){}
+      _fleetMap=L.map("fleetmap"); L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",{attribution:"© OpenStreetMap",maxZoom:19}).addTo(_fleetMap); _fleetMap.setView([20.59,78.96],5);
+      const vm=FLEET.filter(v=>v.lat&&v.lng);
+      vm.forEach(v=>{ L.marker([v.lat,v.lng]).addTo(_fleetMap).bindPopup(`🚗 <b>${esc(v.name||v.number||"Vehicle")}</b><br>${esc([v.number,v.model].filter(Boolean).join(" · "))}`); });
+      if(vm.length) _fleetMap.setView([vm[0].lat,vm[0].lng], vm.length>1?7:13);
+    },60);
+  } else {
+    $("#fleet").innerHTML=sub+`
+      <div class="sec">🚗 COMPANY VEHICLES — live, shared with the app</div>
+      <div class="filters"><button class="btn y" id="vAdd">+ Add vehicle</button><span style="font-size:12px;color:var(--soft)">Vehicles + fuel/service logs added in the app appear here automatically.</span></div>
+      <div id="vehList"><div class="loading">Loading vehicles…</div></div>
+      <div class="sec" style="margin-top:20px">⛽ FUEL & TRAVEL COST — BY FIELD USER ${RANGE.label!=="All time"?"· "+esc(RANGE.label):""}</div>
+      <div class="grid">${stat("Fuel spend",money(totalFuel),'hero')}${stat("Distance",Math.round(totalKm)+" km")}${stat("Cost / km",totalKm?money(totalFuel/totalKm):"—")}${stat("Driver + wages",money(totalDriver))}</div>
+      <div class="tablewrap"><table><tr><th>Field User</th><th>Fuel</th><th>Distance</th><th>Cost/km</th><th>Driver+wages</th><th>Cost/shop</th></tr>
+        ${rows.sort((a,b)=>b.fuel-a.fuel).map(r=>`<tr><td><b>${esc(r.name)}</b></td><td>${money(r.fuel)}</td><td>${Math.round(r.km)} km</td><td>${r.km?money(r.cpk):"—"}</td><td>${money(r.driver)}</td><td>${r.surveyed?money(r.cps):"—"}</td></tr>`).join("")||`<tr><td colspan="6" style="color:var(--soft);padding:14px">No fuel/travel/GPS data in this period.</td></tr>`}
+      </table></div>`;
+    document.querySelectorAll("[data-fv]").forEach(b=>b.onclick=()=>{ _fleetView=b.dataset.fv; renderFleet(); });
+    $("#vAdd").onclick=()=>vehicleForm(null); drawFleet();
+  }
 }
 // ── Vehicles — full fleet management on the shared `fleet` collection (app + web, one source) ──
 const FLEET_TYPES=["Bike","Car","Transport vehicle","Other"];

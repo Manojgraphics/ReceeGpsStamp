@@ -23,7 +23,7 @@ object FleetAlerts {
             days(v.pucExpiry)?.let {
                 if (it < 0) out.add("$tag — PUC EXPIRED") else if (it <= 15) out.add("$tag — PUC expires in $it days")
             }
-            days(v.fitnessExpiry)?.let {
+            if (needsFitness(v)) days(v.fitnessExpiry)?.let {
                 if (it < 0) out.add("$tag — fitness EXPIRED") else if (it <= 15) out.add("$tag — fitness expires in $it days")
             }
         }

@@ -926,8 +926,9 @@ const FLEET_TYPES=["Bike","Car","Transport vehicle","Other"];
 const FLEET_DEFAULT_MAINT=[["Oil change",3000],["Service",5000],["Wheel alignment",5000],["Brake",10000],["Clutch",20000],["Coolant",20000],["Battery",15000],["Tyre",30000]];
 const fleetRid=()=>Math.random().toString(36).slice(2,10);
 function vehEconomy(v){ const s=(v.fuelLogs||[]).filter(f=>f.odometer>0&&f.litres>0).sort((a,b)=>a.odometer-b.odometer); if(s.length<2)return 0; const dist=s[s.length-1].odometer-s[0].odometer, lit=s.reduce((a,b)=>a+(b.litres||0),0)-s[0].litres; return (lit>0&&dist>0)?dist/lit:0; }
+const typeNeedsFitness=t=>t!=="Bike"&&t!=="Car"; // fitness certificate = commercial vehicles only (not Bike/Car)
 function vehAlerts(v){ const out=[], km=v.currentKm||0; (v.maintItems||[]).forEach(mi=>{ if(mi.lastKm>0&&mi.intervalKm>0){ const rem=mi.lastKm+mi.intervalKm-km; if(rem<=0)out.push(`${mi.name} OVERDUE`); else if(rem<=500)out.push(`${mi.name} in ${rem}km`);} });
-  const dd=e=>e>0?Math.floor((e-Date.now())/86400000):null; const dc=(n,e)=>{const x=dd(e); if(x===null)return; if(x<0)out.push(`${n} EXPIRED`); else if(x<=15)out.push(`${n} in ${x}d`);}; dc("Insurance",v.insuranceExpiry); dc("PUC",v.pucExpiry); dc("Fitness",v.fitnessExpiry); return out; }
+  const dd=e=>e>0?Math.floor((e-Date.now())/86400000):null; const dc=(n,e)=>{const x=dd(e); if(x===null)return; if(x<0)out.push(`${n} EXPIRED`); else if(x<=15)out.push(`${n} in ${x}d`);}; dc("Insurance",v.insuranceExpiry); dc("PUC",v.pucExpiry); if(typeNeedsFitness(v.type)) dc("Fitness",v.fitnessExpiry); return out; }
 async function drawFleet(){
   const el=$("#vehList"); if(!el) return; el.innerHTML=`<div class="loading">Loading…</div>`;
   try{ const snap=await getDocs(collection(db,"fleet")); const list=snap.docs.map(d=>({id:d.id,...d.data()}));
@@ -956,7 +957,7 @@ function openVehicle(v){
       ${(v.maintItems||[]).map(mi=>`<tr><td><b>${esc(mi.name)}</b></td><td>${mi.intervalKm||"—"} km</td><td>${mi.lastKm||"—"}</td><td>${dueTxt(mi)}</td></tr>`).join("")||`<tr><td colspan="4" style="color:var(--soft)">—</td></tr>`}
     </table></div>
     <div class="sec">DOCUMENTS</div>
-    <div class="tablewrap"><table><tr><th>Insurance</th><th>PUC</th><th>Fitness</th></tr><tr><td>${docTxt(v.insuranceExpiry)}</td><td>${docTxt(v.pucExpiry)}</td><td>${docTxt(v.fitnessExpiry)}</td></tr></table></div>
+    <div class="tablewrap"><table><tr><th>Insurance</th><th>PUC</th>${typeNeedsFitness(v.type)?`<th>Fitness</th>`:``}</tr><tr><td>${docTxt(v.insuranceExpiry)}</td><td>${docTxt(v.pucExpiry)}</td>${typeNeedsFitness(v.type)?`<td>${docTxt(v.fitnessExpiry)}</td>`:``}</tr></table></div>
     <div class="filters" style="margin-top:12px"><button class="btn y" id="vFuel">⛽ Add fuel</button><button class="btn" id="vSvc">🔧 Add service</button><button class="btn" id="vEdit">Edit</button><button class="btn" id="vDel" style="background:#FBEAE5;color:var(--danger)">Delete</button></div>
     ${(v.fuelLogs||[]).length?`<div class="sec">FUEL HISTORY</div><div class="tablewrap"><table><tr><th>Date</th><th>Odometer</th><th>Litres</th><th>₹</th><th></th></tr>${(v.fuelLogs||[]).slice().sort((a,b)=>(b.date||0)-(a.date||0)).map(f=>`<tr><td>${fmtDate(f.date)}</td><td>${f.odometer} km</td><td>${(f.litres||0).toFixed(1)}</td><td>${money(f.amount||0)}</td><td><span class="logDel" data-kind="fuel" data-id="${esc(f.id||"")}" title="Delete entry" style="color:var(--danger);cursor:pointer;font-weight:700">✕</span></td></tr>`).join("")}</table></div>`:""}
     ${(v.serviceLogs||[]).length?`<div class="sec">SERVICE HISTORY</div><div class="tablewrap"><table><tr><th>Date</th><th>Type</th><th>Odometer</th><th>₹</th><th></th></tr>${(v.serviceLogs||[]).slice().sort((a,b)=>(b.date||0)-(a.date||0)).map(s=>`<tr><td>${fmtDate(s.date)}</td><td>${esc(s.type||"")}</td><td>${s.odometer} km</td><td>${money(s.amount||0)}</td><td><span class="logDel" data-kind="service" data-id="${esc(s.id||"")}" title="Delete entry" style="color:var(--danger);cursor:pointer;font-weight:700">✕</span></td></tr>`).join("")}</table></div>`:""}
@@ -1012,12 +1013,13 @@ function vehicleForm(existing){
       <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px">
         <div><div style="font-size:11px;color:var(--soft);margin-bottom:3px">Insurance</div><input type="date" id="fIns" class="suInp" value="${dval(base.insuranceExpiry)}"></div>
         <div><div style="font-size:11px;color:var(--soft);margin-bottom:3px">PUC</div><input type="date" id="fPuc" class="suInp" value="${dval(base.pucExpiry)}"></div>
-        <div><div style="font-size:11px;color:var(--soft);margin-bottom:3px">Fitness</div><input type="date" id="fFit" class="suInp" value="${dval(base.fitnessExpiry)}"></div>
+        <div id="fFitWrap" style="${typeNeedsFitness(base.type||"Bike")?"":"display:none"}"><div style="font-size:11px;color:var(--soft);margin-bottom:3px">Fitness</div><input type="date" id="fFit" class="suInp" value="${dval(base.fitnessExpiry)}"></div>
       </div>
       <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:20px"><button class="btn" id="fCancel">Cancel</button><button class="btn y" id="fSave">${existing?"Save changes":"Add vehicle"}</button></div>
     </div>`;
   $("#vBack").onclick=()=>renderFleet();
   $("#fCancel").onclick=()=>renderFleet();
+  $("#fType").onchange=()=>{ const fw=$("#fFitWrap"); if(fw) fw.style.display=typeNeedsFitness($("#fType").value)?"":"none"; };
   $("#fSave").onclick=async()=>{
     const number=$("#fNum").value.trim().toUpperCase().replace(/\s+/g,""), name=$("#fName").value.trim();
     if(!number){ alert("Enter the vehicle number."); return; }
@@ -1030,7 +1032,7 @@ function vehicleForm(existing){
     const payload={ number, name, make:$("#fMake").value.trim(), model:$("#fModel").value.trim(), year:parseInt($("#fYear").value)||0,
       chassis:$("#fChassis").value.trim().toUpperCase(), engine:$("#fEngine").value.trim().toUpperCase(),
       type:$("#fType").value, currentKm:parseInt($("#fKm").value)||base.currentKm||0,
-      maintItems:newItems, insuranceExpiry:dms("fIns"), pucExpiry:dms("fPuc"), fitnessExpiry:dms("fFit"),
+      maintItems:newItems, insuranceExpiry:dms("fIns"), pucExpiry:dms("fPuc"), fitnessExpiry:typeNeedsFitness($("#fType").value)?dms("fFit"):0,
       fuelLogs:base.fuelLogs||[], serviceLogs:base.serviceLogs||[], updatedAt:Date.now() };
     try{ await setDoc(doc(db,"fleet",id),payload,{merge:true}); logAudit("vehicle",`${existing?"Edited":"Added"} vehicle ${name||number}`); renderFleet(); }catch(e){ alert("Could not save: "+(e.message||e)); }
   };

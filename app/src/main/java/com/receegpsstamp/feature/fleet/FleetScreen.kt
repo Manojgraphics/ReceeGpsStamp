@@ -190,7 +190,7 @@ private fun VehicleDetail(
         SecLabel("DOCUMENTS")
         DocRow("Insurance", st.insDays)
         DocRow("PUC", st.pucDays)
-        DocRow("Fitness", st.fitDays)
+        if (needsFitness(v)) DocRow("Fitness", st.fitDays)
 
         Spacer(Modifier.height(12.dp))
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {

@@ -112,4 +112,13 @@ class FleetMathTest {
         assertEquals(listOf("Activa — fitness expires in 0 days"), alertsOf(vehicle(), status(fitDays = 0)))
         assertTrue(alertsOf(vehicle(), status(insDays = 20)).isEmpty())
     }
+
+    @Test fun fitness_applies_only_to_commercial_vehicles() {
+        val soon = System.currentTimeMillis() + 5 * DAY
+        // Private Bikes & Cars don't need a fitness certificate → fitDays is null (no row, no alert).
+        assertNull(statusOf(Vehicle(type = "Bike", fitnessExpiry = soon), emptyList()).fitDays)
+        assertNull(statusOf(Vehicle(type = "Car", fitnessExpiry = soon), emptyList()).fitDays)
+        // Transport / Other vehicles still track it.
+        assertNotNull(statusOf(Vehicle(type = "Transport vehicle", fitnessExpiry = soon), emptyList()).fitDays)
+    }
 }

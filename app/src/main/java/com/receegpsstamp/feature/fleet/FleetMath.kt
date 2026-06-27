@@ -25,6 +25,10 @@ internal fun economyOf(logs: List<FuelLog>): Double {
     return if (litres > 0 && dist > 0) dist / litres else 0.0
 }
 
+/** Fitness certificate is a commercial-vehicle requirement — private Bikes & Cars don't need one. */
+internal fun needsFitness(v: Vehicle) =
+    !v.type.equals("Bike", ignoreCase = true) && !v.type.equals("Car", ignoreCase = true)
+
 internal fun statusOf(v: Vehicle, fuel: List<FuelLog>): Status {
     val km = v.currentKm
     val items = v.maintItems.map { mi ->
@@ -32,7 +36,7 @@ internal fun statusOf(v: Vehicle, fuel: List<FuelLog>): Status {
         ItemDue(mi.name, mi.intervalKm, recorded, if (recorded) mi.lastKm + mi.intervalKm - km else 0)
     }
     fun days(exp: Long): Long? = if (exp <= 0L) null else (exp - System.currentTimeMillis()) / 86_400_000L
-    return Status(km, economyOf(fuel), items, days(v.insuranceExpiry), days(v.pucExpiry), days(v.fitnessExpiry))
+    return Status(km, economyOf(fuel), items, days(v.insuranceExpiry), days(v.pucExpiry), if (needsFitness(v)) days(v.fitnessExpiry) else null)
 }
 
 internal fun alertsOf(v: Vehicle, st: Status): List<String> {

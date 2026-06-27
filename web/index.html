@@ -951,8 +951,8 @@ function openVehicle(v){
     <div class="sec">DOCUMENTS</div>
     <div class="tablewrap"><table><tr><th>Insurance</th><th>PUC</th><th>Fitness</th></tr><tr><td>${docTxt(v.insuranceExpiry)}</td><td>${docTxt(v.pucExpiry)}</td><td>${docTxt(v.fitnessExpiry)}</td></tr></table></div>
     <div class="filters" style="margin-top:12px"><button class="btn y" id="vFuel">⛽ Add fuel</button><button class="btn" id="vSvc">🔧 Add service</button><button class="btn" id="vEdit">Edit</button><button class="btn" id="vDel" style="background:#FBEAE5;color:var(--danger)">Delete</button></div>
-    ${(v.fuelLogs||[]).length?`<div class="sec">FUEL HISTORY</div><div class="tablewrap"><table><tr><th>Date</th><th>Odometer</th><th>Litres</th><th>₹</th></tr>${(v.fuelLogs||[]).slice().sort((a,b)=>(b.date||0)-(a.date||0)).map(f=>`<tr><td>${fmtDate(f.date)}</td><td>${f.odometer} km</td><td>${(f.litres||0).toFixed(1)}</td><td>${money(f.amount||0)}</td></tr>`).join("")}</table></div>`:""}
-    ${(v.serviceLogs||[]).length?`<div class="sec">SERVICE HISTORY</div><div class="tablewrap"><table><tr><th>Date</th><th>Type</th><th>Odometer</th><th>₹</th></tr>${(v.serviceLogs||[]).slice().sort((a,b)=>(b.date||0)-(a.date||0)).map(s=>`<tr><td>${fmtDate(s.date)}</td><td>${esc(s.type||"")}</td><td>${s.odometer} km</td><td>${money(s.amount||0)}</td></tr>`).join("")}</table></div>`:""}
+    ${(v.fuelLogs||[]).length?`<div class="sec">FUEL HISTORY</div><div class="tablewrap"><table><tr><th>Date</th><th>Odometer</th><th>Litres</th><th>₹</th><th></th></tr>${(v.fuelLogs||[]).slice().sort((a,b)=>(b.date||0)-(a.date||0)).map(f=>`<tr><td>${fmtDate(f.date)}</td><td>${f.odometer} km</td><td>${(f.litres||0).toFixed(1)}</td><td>${money(f.amount||0)}</td><td><span class="logDel" data-kind="fuel" data-id="${esc(f.id||"")}" title="Delete entry" style="color:var(--danger);cursor:pointer;font-weight:700">✕</span></td></tr>`).join("")}</table></div>`:""}
+    ${(v.serviceLogs||[]).length?`<div class="sec">SERVICE HISTORY</div><div class="tablewrap"><table><tr><th>Date</th><th>Type</th><th>Odometer</th><th>₹</th><th></th></tr>${(v.serviceLogs||[]).slice().sort((a,b)=>(b.date||0)-(a.date||0)).map(s=>`<tr><td>${fmtDate(s.date)}</td><td>${esc(s.type||"")}</td><td>${s.odometer} km</td><td>${money(s.amount||0)}</td><td><span class="logDel" data-kind="service" data-id="${esc(s.id||"")}" title="Delete entry" style="color:var(--danger);cursor:pointer;font-weight:700">✕</span></td></tr>`).join("")}</table></div>`:""}
     <div style="text-align:right;margin-top:12px"><button class="btn" id="vClose">Close</button></div></div>`;
   m.onclick=ev=>{ if(ev.target===m) m.classList.add("hidden"); };
   $("#vClose").onclick=()=>m.classList.add("hidden");
@@ -960,6 +960,15 @@ function openVehicle(v){
   $("#vFuel").onclick=()=>fuelForm(v);
   $("#vSvc").onclick=()=>serviceForm(v);
   $("#vDel").onclick=async()=>{ if(!confirm(`Delete ${v.name||v.number}?`))return; try{ await deleteDoc(doc(db,"fleet",v.id)); logAudit("vehicle",`Deleted vehicle ${v.name||v.number}`); m.classList.add("hidden"); drawFleet(); }catch(e){ alert(e.message||e); } };
+  // Per-log delete — remove one fuel/service entry by id (to fix a wrong entry; re-add via the forms).
+  m.querySelectorAll(".logDel").forEach(b=>b.onclick=async()=>{
+    const kind=b.dataset.kind, id=b.dataset.id; if(!id) return;
+    if(!confirm(`Delete this ${kind} entry?`)) return;
+    const field=kind==="fuel"?"fuelLogs":"serviceLogs";
+    const updated=(v[field]||[]).filter(x=>x.id!==id);
+    try{ await setDoc(doc(db,"fleet",v.id),{[field]:updated,updatedAt:Date.now()},{merge:true}); logAudit("vehicle",`Deleted a ${kind} entry for ${v.name||v.number}`); v[field]=updated; openVehicle(v); drawFleet(); }
+    catch(e){ alert(e.message||e); }
+  });
 }
 // Full-page Add/Edit vehicle form (styled like Project Setup) — replaces the Fleet tab, not a modal.
 function vehicleForm(existing){

@@ -561,17 +561,18 @@ private fun ShopsWorkList(shops: List<Shop>, onAddShop: () -> Unit, onImport: ()
         else base.filter { it.name.contains(query, ignoreCase = true) || it.city.contains(query, ignoreCase = true) }
 
     RgsCard {
-        // Survey progress — how many of this project's shops are done.
-        val total = shops.size
-        if (total > 0) {
-            val pct = done.size * 100 / total
+        // Survey progress — surveyed shops out of actionable ones (Skipped excluded from both).
+        val surveyed = shops.count { it.status != "Pending" && it.status != "Skipped" }
+        val actionable = shops.count { it.status != "Skipped" }   // pending + surveyed
+        if (actionable > 0) {
+            val pct = surveyed * 100 / actionable
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text("${done.size} / $total shops done", fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = NeutralText, modifier = Modifier.weight(1f))
+                Text("$surveyed / $actionable shops done", fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = NeutralText, modifier = Modifier.weight(1f))
                 Text("$pct%", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = AppYellowDark)
             }
             Spacer(Modifier.height(5.dp))
             Box(Modifier.fillMaxWidth().height(6.dp).clip(RoundedCornerShape(50)).background(NeutralSurfaceV)) {
-                Box(Modifier.fillMaxWidth(done.size.toFloat() / total).height(6.dp).clip(RoundedCornerShape(50)).background(AppYellow))
+                Box(Modifier.fillMaxWidth(surveyed.toFloat() / actionable).height(6.dp).clip(RoundedCornerShape(50)).background(AppYellow))
             }
             Spacer(Modifier.height(10.dp))
         }

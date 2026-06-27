@@ -473,6 +473,7 @@ fun MainScaffold(onNavigate: (String) -> Unit, appViewModel: AppViewModel = hilt
                         },
                         onUpdateDistributor = { appViewModel.updateDistributor(it) },
                         onDeleteDistributor = { appViewModel.deleteProject(it) },
+                        onSetProjectStage = { id, stg -> appViewModel.setProjectStage(id, stg) },
                         creatives = appState.selectedCompany?.creatives ?: emptyList(),
                         mediaTypes = appState.selectedCompany?.mediaTypes ?: emptyList(),
                         onAddCreative = { appViewModel.addCreative(it) },

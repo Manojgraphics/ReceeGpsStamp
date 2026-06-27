@@ -28,10 +28,12 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
@@ -87,6 +89,7 @@ fun ProjectSetupScreen(
     onAddDistributor: (name: String, city: String, companyId: String, companyName: String, contact: String) -> Unit = { _, _, _, _, _ -> },
     onUpdateDistributor: (Distributor) -> Unit = {},
     onDeleteDistributor: (String) -> Unit = {},
+    onSetProjectStage: (distributorId: String, stage: String) -> Unit = { _, _ -> },
     creatives: List<String> = emptyList(),
     mediaTypes: List<String> = emptyList(),
     onAddCreative: (String) -> Unit = {},
@@ -207,6 +210,10 @@ fun ProjectSetupScreen(
                         stage = selectedDistributor?.stage ?: "",
                         onSetup = { page = "setup" },
                     )
+                    // Quick stage progression — visible action right where the user works
+                    selectedDistributor?.let { sd ->
+                        StageActionRow(stage = sd.stage, onSetStage = { onSetProjectStage(sd.id, it) })
+                    }
 
                     // Quick switch — up to 3 of this company's projects, one tap to jump.
                     val companyDistributors = distributors.filter { it.companyId == (selectedCompany?.id ?: "") }
@@ -372,6 +379,61 @@ private fun CurrentProjectCard(companyName: String, distributorName: String, cre
                 Text("Select project", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color.Black)
             }
         }
+    }
+}
+
+// Quick stage progression: 1-tap to mark Recce/Installation done — admin web sees status update.
+@Composable
+private fun StageActionRow(stage: String, onSetStage: (String) -> Unit) {
+    var confirm by remember { mutableStateOf<String?>(null) }
+    RgsCard(Modifier.fillMaxWidth().padding(top = 6.dp)) {
+        when (stage) {
+            "RecceDone" -> Row(verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    Text("✓ Recce phase complete", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = AppYellowDark)
+                    Text("Admin sees this status. Mark installation done when the project is fully installed.", fontSize = 11.sp, color = NeutralTextSoft)
+                }
+                Spacer(Modifier.width(10.dp))
+                Box(Modifier.clip(RoundedCornerShape(9.dp)).background(BrandGradient).clickable { confirm = "InstallDone" }.padding(horizontal = 14.dp, vertical = 9.dp)) {
+                    Text("🏁 Install done", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color.Black)
+                }
+            }
+            "InstallDone" -> Row(verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    Text("🏁 Project complete", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = Color(0xFF1B873F))
+                    Text("All done. Reopen if there's more work to do.", fontSize = 11.sp, color = NeutralTextSoft)
+                }
+                Spacer(Modifier.width(10.dp))
+                Box(Modifier.clip(RoundedCornerShape(9.dp)).background(NeutralSurfaceV).clickable { confirm = "" }.padding(horizontal = 14.dp, vertical = 9.dp)) {
+                    Text("↻ Reopen", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = NeutralTextSoft)
+                }
+            }
+            else -> Row(verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    Text("📋 Recce in progress", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = NeutralText)
+                    Text("Once you've covered all shops for this project, mark recce done — admin's dashboard updates.", fontSize = 11.sp, color = NeutralTextSoft)
+                }
+                Spacer(Modifier.width(10.dp))
+                Box(Modifier.clip(RoundedCornerShape(9.dp)).background(BrandGradient).clickable { confirm = "RecceDone" }.padding(horizontal = 14.dp, vertical = 9.dp)) {
+                    Text("✓ Recce done", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color.Black)
+                }
+            }
+        }
+    }
+    confirm?.let { target ->
+        val pair: Pair<String, String> = when (target) {
+            "RecceDone" -> "Mark Recce Done?" to "This tells admin the recce phase is complete for this project. You can still keep adding recces if needed — admin will see the status update on their dashboard."
+            "InstallDone" -> "Mark Installation Done?" to "This marks the whole project complete. Admin's dashboard will show ✓ Installation Done."
+            else -> "Reopen project?" to "This clears the status back to active so the project shows as ongoing again."
+        }
+        val title = pair.first; val body = pair.second
+        AlertDialog(
+            onDismissRequest = { confirm = null },
+            title = { Text(title) },
+            text = { Text(body, fontSize = 13.sp) },
+            confirmButton = { TextButton(onClick = { onSetStage(target); confirm = null }) { Text("Confirm") } },
+            dismissButton = { TextButton(onClick = { confirm = null }) { Text("Cancel") } },
+        )
     }
 }
 

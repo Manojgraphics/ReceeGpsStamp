@@ -1128,8 +1128,10 @@ async function renderFleet(){
   if(_fleetView==="services") return renderFleetServices(V);
   if(_fleetView==="maint") return renderFleetMaintenance(V);
   const bikes=V.filter(v=>v.type==="Bike").length, fourw=V.length-bikes;
-  const ecs=V.map(v=>vehEconomy(v)).filter(x=>x>0), avgEc=ecs.length?Math.round(ecs.reduce((a,b)=>a+b,0)/ecs.length):0;
-  // This-month aggregates (km + fuel + ₹/km) — primary fleet metrics
+  // Mileage is per-vehicle (mixing bikes + trucks gives a meaningless average) — surface the BEST performer instead.
+  const ecArr=V.map(v=>({v,ec:vehEconomy(v)})).filter(o=>o.ec>0).sort((a,b)=>b.ec-a.ec);
+  const bestEc=ecArr[0];
+  // This-month aggregates (km + fuel + ₹/km) — fleet-wide totals are legitimate (sum/sum, not average-of-averages)
   const mAgg=V.reduce((a,v)=>{ const m=vehMonth(v); a.km+=m.km; a.fuel+=m.fuel; a.lit+=m.litres; a.fills+=m.fills; return a; },{km:0,fuel:0,lit:0,fills:0});
   const avgCpk=mAgg.km>0?mAgg.fuel/mAgg.km:0;
   const allAlerts=[]; V.forEach(v=>vehAlerts(v).forEach(a=>allAlerts.push({v,a})));
@@ -1160,7 +1162,7 @@ async function renderFleet(){
       ${kpi("KM · THIS MONTH",mAgg.km.toLocaleString("en-IN"),"📏",mAgg.km?`across ${V.length} vehicle${V.length===1?"":"s"}`:"no km logged")}
       ${kpi("FUEL · THIS MONTH",money(mAgg.fuel),"⛽",mAgg.lit?`${mAgg.lit.toFixed(1)} L · ${mAgg.fills} fill${mAgg.fills===1?"":"s"}`:"no fuel logged")}
       ${kpi("₹ / KM · AVG",avgCpk?"₹"+avgCpk.toFixed(2):"—","💸",avgCpk?"this month":"need km + fuel")}
-      ${kpi("AVG MILEAGE",avgEc||"—","📊",avgEc?"km / litre · lifetime":"no fuel logs")}
+      ${kpi("BEST MILEAGE",bestEc?bestEc.ec.toFixed(1):"—","🏆",bestEc?esc(bestEc.v.number||bestEc.v.name)+" · km/l":"no fuel logs")}
       ${kpi("ALERTS",allAlerts.length,"⚠",allAlerts.length?`${expired} expired/overdue · ${due} due`:"all up to date",allAlerts.length>0)}
     </div>
     <div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(300px,1fr));margin-top:14px">
@@ -1966,7 +1968,7 @@ function renderSetup(){
           <select id="suCo" style="width:100%">${comps.map(c=>`<option value="${esc(c.name)}" ${c.name===_suCo?"selected":""}>${esc(c.name)}</option>`).join("")}</select>
           <div style="font-size:10.5px;font-weight:800;letter-spacing:.5px;color:var(--soft);margin:14px 0 6px">DISTRIBUTOR</div>
           <select id="suDist" style="width:100%">${dists.length?dists.map(d=>`<option value="${esc(d.id)}" ${d.id===_suDist?"selected":""}>${esc(d.name)}${d.city?" · "+esc(d.city):""}</option>`).join(""):`<option value="">— none yet —</option>`}</select>
-          <div style="display:flex;gap:8px;margin-top:10px"><button class="btn" id="suAddDist" style="flex:1">+ Add distributor</button>${dist?`<button class="btn dDelOne" style="background:#FBEAE5;color:var(--danger);padding:6px 10px" title="Remove this distributor">🗑️</button>`:""}</div>
+          <div style="display:flex;gap:8px;margin-top:10px"><button class="btn" id="suAddDist" style="flex:1">+ Add distributor</button>${dist?`<button class="btn dEditOne" style="padding:6px 10px" title="Rename this distributor">✏️</button><button class="btn dDelOne" style="background:#FBEAE5;color:var(--danger);padding:6px 10px" title="Remove this distributor">🗑️</button>`:""}</div>
         </div>
         <div class="card" style="padding:18px"><b style="font-size:14.5px">Work mode</b>
           <div style="display:flex;gap:0;background:var(--bg);border-radius:11px;padding:4px;margin-top:11px">
@@ -2006,6 +2008,7 @@ function renderSetup(){
   document.querySelectorAll("#setup .chipDel").forEach(b=>b.onclick=()=>removeCompanyItem(_suCo, b.dataset.k==="cre"?"creatives":"mediaTypes", b.dataset.v));
   document.querySelectorAll("#setup .chipAdd").forEach(b=>b.onclick=()=>addCompanyItemPrompt(b.dataset.k));
   { const d=document.querySelector("#setup .dDelOne"); if(d) d.onclick=()=>removeDistributor(_suDist); }
+  { const e=document.querySelector("#setup .dEditOne"); if(e) e.onclick=()=>renameDistributorDialog(_suDist); }
   { const im=$("#suImport"); if(im) im.onclick=()=>importShopsDialog(dist); }
   $("#apGo").onclick=async()=>{
     const uid=$("#apSur").value; if(!uid){ alert("Choose a field user"); return; }
@@ -2032,6 +2035,48 @@ async function addCompanyItem(coName,field,value){ if(!value)return; try{ const 
 async function removeCompanyItem(coName,field,value){ try{ const {comps,dists}=await loadCat(); const ci=comps.findIndex(c=>(c.name||"").toLowerCase()===(coName||"").toLowerCase()); if(ci<0)return; comps[ci][field]=(comps[ci][field]||[]).filter(x=>x.toLowerCase()!==(value||"").toLowerCase()); await saveCatalog(comps,dists); renderSetup(); }catch(e){ alert("Save failed: "+(e.message||e)); } }
 async function setStage(distId,stage){ if(!distId)return; try{ const {comps,dists}=await loadCat(); const i=dists.findIndex(d=>d.id===distId); if(i<0)return; dists[i].stage=stage; await saveCatalog(comps,dists); logAudit("setup",`Set ${dists[i].name} → ${stage}`); renderSetup(); }catch(e){ alert("Save failed: "+(e.message||e)); } }
 async function removeDistributor(distId){ if(!distId)return; const d=(CATALOG.distributors||[]).find(x=>x.id===distId); if(!d)return; if(!confirm(`Remove distributor "${d.name}"? (This only removes it from the shared catalog; shops already pushed to field users stay.)`))return; try{ const {comps,dists}=await loadCat(); await saveCatalog(comps, dists.filter(x=>x.id!==distId)); _suDist=""; logAudit("setup",`Removed distributor ${d.name}`); renderSetup(); }catch(e){ alert("Save failed: "+(e.message||e)); } }
+// Rename a distributor + cascade the new name to every field user's local distributors + assignments
+// so old recces/shops display under the new name everywhere.
+async function renameDistributorDialog(distId){
+  if(!distId) return;
+  const cd=(CATALOG.distributors||[]).find(x=>x.id===distId); if(!cd){ alert("Distributor not found"); return; }
+  const v=prompt(`Rename distributor "${cd.name}" to:`, cd.name);
+  if(v===null) return;
+  const newName=String(v||"").trim(); if(!newName || newName===cd.name) return;
+  if((CATALOG.distributors||[]).some(d=>d.id!==distId && (d.name||"").toLowerCase()===newName.toLowerCase())){ alert(`Another distributor already named "${newName}".`); return; }
+  if(!confirm(`Rename "${cd.name}" → "${newName}"?\n\nThis updates every field user's local copy (so old recces / shops show the new name).`)) return;
+  const oldName=cd.name;
+  try{
+    // 1) Catalog rename
+    const {comps,dists}=await loadCat();
+    const idx=dists.findIndex(d=>d.id===distId); if(idx<0){ alert("Catalog entry missing"); return; }
+    dists[idx].name=newName; await saveCatalog(comps,dists);
+    // 2) Cascade to each field user's backup/distributors + assignments doc
+    let touchedUsers=0;
+    for(const s of ((DATA&&DATA.surveyors)||[])){
+      let changed=false;
+      try{
+        const dRef=doc(db,"users",s.uid,"backup","distributors");
+        const ds=await getDoc(dRef);
+        if(ds.exists()){ let arr=[]; try{arr=JSON.parse(ds.get("json")||"[]");}catch(e){}
+          let touched=false; arr.forEach(x=>{ if(x && (x.name||"").toLowerCase()===oldName.toLowerCase()){ x.name=newName; touched=true; } });
+          if(touched){ await setDoc(dRef,{json:JSON.stringify(arr),updatedAt:Date.now()},{merge:true}); changed=true; } }
+      }catch(e){}
+      try{
+        const aRef=doc(db,"assignments",s.uid);
+        const as=await getDoc(aRef);
+        if(as.exists()){ const d=as.data()||{}; let touched=false;
+          (d.projects||[]).forEach(p=>{ if((p.name||"").toLowerCase()===oldName.toLowerCase()){ p.name=newName; touched=true; } });
+          (d.shops||[]).forEach(sh=>{ if((sh.project||"").toLowerCase()===oldName.toLowerCase()){ sh.project=newName; touched=true; } });
+          if(touched){ await setDoc(aRef,{projects:d.projects||[],shops:d.shops||[],updatedAt:Date.now()},{merge:true}); changed=true; } }
+      }catch(e){}
+      if(changed) touchedUsers++;
+    }
+    logAudit("setup",`Renamed distributor "${oldName}" → "${newName}" (cascade to ${touchedUsers} field user${touchedUsers===1?"":"s"})`);
+    alert(`✓ Renamed "${oldName}" → "${newName}".${touchedUsers?` Updated ${touchedUsers} field user${touchedUsers===1?"":"s"}.`:""} Refreshing data…`);
+    load();
+  }catch(e){ alert("Rename failed: "+(e.message||e)); }
+}
 function newCompanyDialog(){ const m=$("#modal"); m.classList.remove("hidden"); m.innerHTML=`<div class="modalbox"><h3 style="margin:0 0 10px">+ New company</h3><input type="text" id="ncName" placeholder="Company name" class="suInp" autofocus><div style="text-align:right;margin-top:12px"><button class="btn" id="ncCancel">Cancel</button> <button class="btn y" id="ncSave">Add</button></div></div>`; m.onclick=ev=>{ if(ev.target===m) m.classList.add("hidden"); }; $("#ncCancel").onclick=()=>m.classList.add("hidden"); $("#ncSave").onclick=async()=>{ const n=($("#ncName").value||"").trim(); if(!n){ alert("Enter a name"); return; } try{ const {comps,dists}=await loadCat(); if(comps.some(c=>(c.name||"").toLowerCase()===n.toLowerCase())){ alert("Already exists"); return; } comps.push({id:fleetRid(),name:n,creatives:[],mediaTypes:[],userId:"",createdAt:Date.now()}); await saveCatalog(comps,dists); logAudit("setup",`Added company ${n}`); _suCo=n; _suDist=""; m.classList.add("hidden"); renderSetup(); }catch(e){ alert("Save failed: "+(e.message||e)); } }; }
 function importShopsDialog(dist){ if(!dist){ alert("Pick a distributor first"); return; } const surs=((DATA&&DATA.surveyors)||[]).filter(s=>!isHidden(s.uid)); const m=$("#modal"); m.classList.remove("hidden"); m.innerHTML=`<div class="modalbox"><h3 style="margin:0 0 4px">📊 Import shops · ${esc(dist.name)}</h3><div style="font-size:12px;color:var(--soft);margin-bottom:10px">Shops are pushed to a specific field user's app. Format per line: <b>name, city, mobile</b></div><div class="filters"><select id="imSur" style="flex:1;min-width:200px"><option value="">Choose field user…</option>${surs.map(s=>`<option value="${esc(s.uid)}">${esc(s.name)}</option>`).join("")}</select><button class="btn" id="imFileBtn">⬆ Upload CSV</button><input type="file" id="imFile" accept=".csv,.txt,text/csv,text/plain" style="display:none"></div><textarea id="imText" placeholder="Ramesh Store, Jalgaon, 9876543210&#10;Shree Garments, Bhusawal" class="suInp" style="min-height:140px;resize:vertical;margin-top:10px"></textarea><div style="text-align:right;margin-top:12px"><button class="btn" id="imCancel">Cancel</button> <button class="btn y" id="imGo">Import</button></div></div>`; m.onclick=ev=>{ if(ev.target===m) m.classList.add("hidden"); }; $("#imCancel").onclick=()=>m.classList.add("hidden"); $("#imFileBtn").onclick=()=>$("#imFile").click(); $("#imFile").onchange=e=>{ const f=e.target.files[0]; if(!f)return; const r=new FileReader(); r.onload=()=>{ const t=$("#imText"); t.value=(t.value.trim()?t.value.trim()+"\n":"")+String(r.result||"").trim(); }; r.readAsText(f); }; $("#imGo").onclick=async()=>{ const uid=$("#imSur").value; if(!uid){ alert("Choose a field user"); return; } const lines=$("#imText").value.split("\n").map(l=>l.trim()).filter(Boolean); if(!lines.length){ alert("Paste or upload some shops"); return; } const incoming=lines.map(l=>{ const p=l.split(",").map(x=>x.trim()); return {id:rid(),name:p[0]||"",city:p[1]||"",contact:(p[2]||"").replace(/\D/g,"").slice(0,10),company:dist.companyName||"",project:dist.name||""}; }).filter(s=>s.name); try{ const r=doc(db,"assignments",uid), d=await getDoc(r), data=(d.exists()&&d.data())||{}; const curS=data.shops||[]; const seen=new Set(curS.map(s=>(s.name||"").toLowerCase()+"|"+(s.project||"").toLowerCase())); const addS=incoming.filter(s=>!seen.has(s.name.toLowerCase()+"|"+(s.project||"").toLowerCase())); await setDoc(r,{shops:[...curS,...addS],updatedAt:Date.now()},{merge:true}); const uname=(($("#imSur").selectedOptions[0]||{}).text)||uid; logAudit("setup",`Imported ${addS.length} shop(s) for ${dist.name} → ${uname}`); m.classList.add("hidden"); alert(`Imported ${addS.length} shop(s) ✓ · will appear in ${uname}'s app after sync.`); }catch(e){ alert("Import failed: "+(e.message||e)); } }; }
 // Catalog manager — admin adds/removes Companies, their Creatives & Media types, and Distributors (shared).

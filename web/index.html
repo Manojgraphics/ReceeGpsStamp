@@ -147,7 +147,6 @@
       <div class="nav-section">Main</div>
       <div class="nav-item on" data-tab="overview"><span class="nav-ic"><i class="ti ti-layout-dashboard"></i></span>Overview</div>
       <div class="nav-item" data-tab="leaderboard"><span class="nav-ic"><i class="ti ti-trophy"></i></span>Leaderboard</div>
-      <div class="nav-item" data-tab="team"><span class="nav-ic"><i class="ti ti-users-group"></i></span>Field Team</div>
       <div class="nav-item" data-tab="projects"><span class="nav-ic"><i class="ti ti-building-store"></i></span>Projects</div>
       <div class="nav-item" data-tab="setup"><span class="nav-ic"><i class="ti ti-settings"></i></span>Project Setup</div>
       <div class="nav-section">Insights</div>
@@ -519,11 +518,13 @@ function renderOverview(){
 }
 
 // ── Leaderboard ──
-let _lbMetric="recces";
+let _lbMetric="recces", _lbShowHidden=false;
 function renderLeaderboard(){
   // Per-user install count (Installed status from app installs)
   const insCount={}; installUnits(DATA.recces||[]).forEach(o=>{ if(o.fi&&o.fi.status==="Installed"){ const uid=o.r.uid; insCount[uid]=(insCount[uid]||0)+1; } });
-  const rows=fSurveyorsVisible().map(s=>({...s,installs:insCount[s.uid]||0,conv:s.surveyed?Math.round(s.interested*100/s.surveyed):0,target:TARGETS[s.uid]||0,tgtPct:TARGETS[s.uid]?Math.min(100,Math.round(s.surveyed*100/TARGETS[s.uid])):0})).filter(s=>s.surveyed>0||s.installs>0||s.target>0);
+  const pool=_lbShowHidden?fSurveyors():fSurveyorsVisible();
+  const hiddenCount=DATA?(DATA.surveyors||[]).filter(s=>isHidden(s.uid)).length:0;
+  const rows=pool.map(s=>({...s,installs:insCount[s.uid]||0,conv:s.surveyed?Math.round(s.interested*100/s.surveyed):0,target:TARGETS[s.uid]||0,tgtPct:TARGETS[s.uid]?Math.min(100,Math.round(s.surveyed*100/TARGETS[s.uid])):0,hidden:isHidden(s.uid)})).filter(s=>s.surveyed>0||s.installs>0||s.target>0);
   const sorter = _lbMetric==="conv" ? (a,b)=>(b.surveyed>=5?b.conv:-1)-(a.surveyed>=5?a.conv:-1)||b.interested-a.interested
                 : _lbMetric==="installs" ? (a,b)=>b.installs-a.installs||b.surveyed-a.surveyed
                 : (a,b)=>b.surveyed-a.surveyed||b.interested-a.interested;
@@ -542,6 +543,7 @@ function renderLeaderboard(){
     <div style="display:flex;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:14px">
       <div style="flex:1;min-width:140px"><div style="font-size:18px;font-weight:800">🏆 Leaderboard</div><div style="font-size:12.5px;color:var(--soft)">Top field users · ${esc(RANGE.label)}</div></div>
       <div class="filters" style="gap:4px;background:var(--bg);border-radius:50px;padding:3px">${tab("recces","Surveyed")}${tab("conv","Conversion")}${tab("installs","Installs")}</div>
+      ${(hiddenCount||_lbShowHidden)?`<button class="btn ${_lbShowHidden?'y':''}" id="lbHid" style="padding:6px 12px;font-size:12px" title="Toggle showing hidden / duplicate users">${_lbShowHidden?"👁 Hide hidden":"👁 Show hidden ("+hiddenCount+")"}</button>`:""}
     </div>
     ${list.length?`
     <div class="card" style="padding:18px;background:linear-gradient(180deg,var(--card) 0%,var(--bg) 100%)">
@@ -561,8 +563,8 @@ function renderLeaderboard(){
       <div class="tablewrap"><table>
         <tr><th>#</th><th>Field User</th><th>Surveyed</th><th>Interested</th><th>Conv</th><th>Installs</th><th>Target</th><th>Last sync</th></tr>
         ${list.map((s,i)=>{ const stale=s.lastActive&&(Date.now()-s.lastActive)>=3*86400000; const ms=s.lastActive?Math.floor((Date.now()-s.lastActive)/86400000):null;
-          return `<tr style="${i<3?'background:rgba(255,196,0,.04)':''}"><td style="font-weight:800;color:${i<3?'var(--brand-d)':'var(--soft)'}">${i+1}</td>
-            <td class="wrap"><div style="display:flex;align-items:center;gap:8px"><div style="width:28px;height:28px;border-radius:50%;background:var(--dark);color:#fff;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:800;flex:0 0 auto">${esc(initials(s.name))}</div><div style="min-width:0"><b class="suLink" data-uid="${esc(s.uid)}" style="color:var(--brand-d);cursor:pointer">${esc(s.name)}</b>${s.mobile?`<br><span style="font-size:11px;color:var(--soft)">${esc(s.mobile)}</span>`:""} <div style="margin-top:3px">${badges(s)}</div></div></div></td>
+          return `<tr style="${s.hidden?'opacity:.55;':''}${i<3&&!s.hidden?'background:rgba(255,196,0,.04)':''}"><td style="font-weight:800;color:${i<3?'var(--brand-d)':'var(--soft)'}">${i+1}</td>
+            <td class="wrap"><div style="display:flex;align-items:center;gap:8px"><div style="width:28px;height:28px;border-radius:50%;background:var(--dark);color:#fff;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:800;flex:0 0 auto">${esc(initials(s.name))}</div><div style="min-width:0"><b class="suLink" data-uid="${esc(s.uid)}" style="color:var(--brand-d);cursor:pointer">${esc(s.name)}${s.hidden?' <span style="font-size:9.5px;color:var(--soft);font-weight:700;letter-spacing:.4px">· HIDDEN</span>':""}</b>${s.mobile?`<br><span style="font-size:11px;color:var(--soft)">${esc(s.mobile)}</span>`:""} <div style="margin-top:3px">${badges(s)}</div></div></div></td>
             <td><b>${s.surveyed}</b></td><td>${s.interested}</td>
             <td>${s.surveyed?s.conv+"%":"—"}</td>
             <td>${s.installs||"—"}</td>
@@ -573,6 +575,7 @@ function renderLeaderboard(){
   document.querySelectorAll("#leaderboard .suLink").forEach(b=>b.onclick=()=>openSurveyor(b.dataset.uid));
   document.querySelectorAll("#leaderboard .lbPodium").forEach(b=>b.onclick=()=>openSurveyor(b.dataset.uid));
   document.querySelectorAll("#leaderboard .lbTab").forEach(b=>b.onclick=()=>{ _lbMetric=b.dataset.m; renderLeaderboard(); });
+  { const h=$("#lbHid"); if(h) h.onclick=()=>{ _lbShowHidden=!_lbShowHidden; renderLeaderboard(); }; }
 }
 
 // ── Surveyor detail (modal) ──
@@ -591,15 +594,16 @@ function openSurveyor(uid){
     <div class="tablewrap" style="max-height:260px;overflow:auto"><table><tr><th>Shop</th><th>City</th><th>Status</th><th>Date</th><th>📷</th></tr>
       ${r.slice(0,40).map(x=>`<tr><td class="wrap"><b>${esc(x.shop)}</b></td><td>${esc(x.city)}</td><td><span class="pill ${(x.status||"").replace(/ /g,"")}">${esc(x.status)}</span></td><td>${fmtDate(x.date)}</td><td>${x.photos.length||"—"}</td></tr>`).join("")||`<tr><td colspan="5" style="color:var(--soft);padding:14px">No recces in this period.</td></tr>`}
     </table></div>
-    ${ROLE==="admin"?`<div class="sec">MANAGE ACCESS</div><div class="card" style="display:flex;align-items:center;gap:10px">
-      <div style="flex:1;font-size:12.5px">Login: <b style="color:${DISABLED[uid]?'var(--red)':'#1B873F'}">${DISABLED[uid]?'Disabled':'Active'}</b></div>
-      <button class="btn ${DISABLED[uid]?'y':''}" id="suTog">${DISABLED[uid]?'Enable login':'Disable login'}</button></div>`:''}
+    ${(ROLE==="admin"||ROLE==="manager")?`<div class="sec">MANAGE ACCESS</div><div class="card" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+      ${ROLE==="admin"?`<div style="flex:1;font-size:12.5px;min-width:140px">Login: <b style="color:${DISABLED[uid]?'var(--red)':'#1B873F'}">${DISABLED[uid]?'Disabled':'Active'}</b></div><button class="btn ${DISABLED[uid]?'y':''}" id="suTog">${DISABLED[uid]?'Enable login':'Disable login'}</button>`:'<div style="flex:1"></div>'}
+      <button class="btn" id="suHide" style="${isHidden(uid)?'background:#FFF6DC;color:var(--brand-d)':'background:#FBEAE5;color:var(--danger)'}" title="${isHidden(uid)?'Unhide (show in dashboard lists)':'Hide this user from dashboard lists (for duplicate/wrong-number accounts). Does NOT disable login.'}">${isHidden(uid)?"👁 Unhide":"🚫 Hide from dashboard"}</button></div>`:''}
     <div style="text-align:right;margin-top:10px"><button class="btn" id="suExp">⬇ Export CSV</button> <button class="btn y" id="suCls">Close</button></div></div>`;
   m.onclick=ev=>{ if(ev.target===m) m.classList.add("hidden"); }; $("#suCls").onclick=()=>m.classList.add("hidden");
   $("#suExp").onclick=()=>exportSurveyor(uid);
   if(ROLE==="admin"){ const tg=$("#suTog"); if(tg) tg.onclick=async()=>{ const want=!DISABLED[uid]; tg.disabled=true; tg.textContent="…";
     try{ await httpsCallable(functions,"setUserDisabled")({uid,disabled:want}); DISABLED[uid]=want; openSurveyor(uid); }
     catch(e){ alert("Could not change login: "+((e&&e.message)||e)); openSurveyor(uid); } }; }
+  { const hb=$("#suHide"); if(hb) hb.onclick=async()=>{ const was=isHidden(uid); if(!was && !confirm(`Hide ${s.name} from all dashboard lists?\n\nFor duplicate / wrong-number accounts. Does NOT disable login. Reversible.`)) return; await setHidden(uid,!was); m.classList.add("hidden"); }; }
 }
 
 // Admin: export one field user's full data (recces + expenses) as a CSV the admin can keep.
@@ -1115,8 +1119,9 @@ async function renderFleet(){
   if(_fleetView==="services") return renderFleetServices(V);
   const bikes=V.filter(v=>v.type==="Bike").length, fourw=V.length-bikes;
   const ecs=V.map(v=>vehEconomy(v)).filter(x=>x>0), avgEc=ecs.length?Math.round(ecs.reduce((a,b)=>a+b,0)/ecs.length):0;
-  const now=new Date(), mStart=new Date(now.getFullYear(),now.getMonth(),1).getTime();
-  let fuelAmt=0,fuelLit=0,fills=0; V.forEach(v=>(v.fuelLogs||[]).forEach(f=>{ if((f.date||0)>=mStart){ fuelAmt+=f.amount||0; fuelLit+=f.litres||0; fills++; } }));
+  // This-month aggregates (km + fuel + ₹/km) — primary fleet metrics
+  const mAgg=V.reduce((a,v)=>{ const m=vehMonth(v); a.km+=m.km; a.fuel+=m.fuel; a.lit+=m.litres; a.fills+=m.fills; return a; },{km:0,fuel:0,lit:0,fills:0});
+  const avgCpk=mAgg.km>0?mAgg.fuel/mAgg.km:0;
   const allAlerts=[]; V.forEach(v=>vehAlerts(v).forEach(a=>allAlerts.push({v,a})));
   const expired=allAlerts.filter(o=>/EXPIRED|OVERDUE/.test(o.a)).length, due=allAlerts.length-expired;
   const kpi=(lbl,val,ic,sub,red)=>`<div class="card" style="padding:15px"><div style="display:flex;align-items:center;justify-content:space-between"><span style="font-size:11px;font-weight:800;letter-spacing:.4px;color:var(--soft)">${lbl}</span><span style="font-size:15px">${ic}</span></div><div style="font-size:28px;font-weight:800;margin-top:4px;color:${red?'var(--danger)':'var(--ink)'}">${val}</div><div style="font-size:11px;color:${red?'var(--danger)':'var(--brand-d)'};margin-top:2px">${sub}</div></div>`;
@@ -1132,23 +1137,32 @@ async function renderFleet(){
       <button class="btn" id="flLog">↓ Fuel log</button>
       <button class="btn y" id="vManage">🚗 Manage vehicles</button>
     </div>
-    <div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(180px,1fr))">
+    <div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(160px,1fr))">
       ${kpi("VEHICLES",V.length,"🚙",`${bikes} bike${bikes===1?"":"s"} · ${fourw} four-wheel`)}
-      ${kpi("AVG MILEAGE",avgEc||"—","⛽",avgEc?"km / litre":"no fuel logs")}
-      ${kpi("FUEL · THIS MONTH",money(fuelAmt),"₹",`${Math.round(fuelLit)} L · ${fills} fill${fills===1?"":"s"}`)}
+      ${kpi("KM · THIS MONTH",mAgg.km.toLocaleString("en-IN"),"📏",mAgg.km?`across ${V.length} vehicle${V.length===1?"":"s"}`:"no km logged")}
+      ${kpi("FUEL · THIS MONTH",money(mAgg.fuel),"⛽",mAgg.lit?`${mAgg.lit.toFixed(1)} L · ${mAgg.fills} fill${mAgg.fills===1?"":"s"}`:"no fuel logged")}
+      ${kpi("₹ / KM · AVG",avgCpk?"₹"+avgCpk.toFixed(2):"—","💸",avgCpk?"this month":"need km + fuel")}
+      ${kpi("AVG MILEAGE",avgEc||"—","📊",avgEc?"km / litre · lifetime":"no fuel logs")}
       ${kpi("ALERTS",allAlerts.length,"⚠",allAlerts.length?`${expired} expired/overdue · ${due} due`:"all up to date",allAlerts.length>0)}
     </div>
     <div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(300px,1fr));margin-top:14px">
-      ${V.map(v=>{ const ec=vehEconomy(v), tm=vehTripMileage(v), hot=vehAlerts(v).length>0;
+      ${V.map(v=>{ const ec=vehEconomy(v), tm=vehTripMileage(v), hot=vehAlerts(v).length>0, m=vehMonth(v), drop=vehMileageDrop(v);
+        const big=(top,bot,sub,col)=>`<div style="text-align:center;flex:1;min-width:0"><div style="font-size:18px;font-weight:800;color:${col||'var(--ink)'};line-height:1.1">${top}</div><div style="font-size:9px;letter-spacing:.4px;color:var(--soft);margin-top:3px">${bot}</div>${sub?`<div style="font-size:9.5px;color:var(--soft);margin-top:1px">${sub}</div>`:""}</div>`;
         return `<div class="card vehCard" data-id="${esc(v.id)}" style="cursor:pointer;${hot?'border:1.5px solid #E6A6A6;':''}">
           <div style="display:flex;align-items:center;gap:11px">
             <div style="width:42px;height:42px;border-radius:11px;background:var(--dark);display:flex;align-items:center;justify-content:center;font-size:20px;flex:0 0 auto">${typeIc(v.type)}</div>
-            <div style="flex:1;min-width:0"><div style="font-weight:800;font-size:15px">${esc(v.number||v.name||"Vehicle")}</div><div style="font-size:11.5px;color:var(--soft);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc([[v.make,v.model].filter(Boolean).join(" "),v.year?fmtYM(v.year):"",v.type].filter(Boolean).join(" · "))}</div></div>
-            <div style="text-align:right;flex:0 0 auto"><div style="font-weight:800;font-size:15px">${(tm||ec)?(tm||ec).toFixed(0):"—"} <span style="font-size:10px;color:var(--soft)">km/l</span></div><div style="font-size:10.5px;color:var(--soft)">${(v.currentKm||0).toLocaleString("en-IN")} km</div></div>
+            <div style="flex:1;min-width:0"><div style="font-weight:800;font-size:15px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(v.number||v.name||"Vehicle")}</div><div style="font-size:11.5px;color:var(--soft);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc([[v.make,v.model].filter(Boolean).join(" "),v.year?fmtYM(v.year):"",v.type].filter(Boolean).join(" · "))}</div></div>
+            <div style="text-align:right;flex:0 0 auto;font-size:10.5px;color:var(--soft)">${(v.currentKm||0).toLocaleString("en-IN")} km</div>
           </div>
-          <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:11px">${docPill("INS",v.insuranceExpiry)}${docPill("PUC",v.pucExpiry)}${docPill("FIT",v.fitnessExpiry,typeNeedsFitness(v.type))}</div>
-          <div style="border-top:1px solid var(--line);margin-top:11px;padding-top:9px;font-size:12px">${lastFuelLine(v)}</div>
-          <div style="margin-top:5px;font-size:12px">${svcLine(v)}</div>
+          <div style="display:flex;gap:8px;margin-top:12px;background:var(--bg);border-radius:10px;padding:10px 6px">
+            ${big((tm||ec)?(tm||ec).toFixed(1):"—","km/l "+(tm?"trip":"lifetime"),ec&&tm?"lifetime "+ec.toFixed(1):"","var(--brand-d)")}
+            ${big(m.km?m.km.toLocaleString("en-IN"):"—","km this month",m.lit?m.lit.toFixed(1)+" L":"")}
+            ${big(m.cpk?"₹"+m.cpk.toFixed(2):"—","₹ / km",m.fuel?money(m.fuel)+" fuel":"")}
+          </div>
+          ${drop?`<div style="margin-top:8px;background:#FBEAE5;color:var(--danger);border-radius:8px;padding:7px 10px;font-size:11.5px;font-weight:700">⚠ Mileage dropped ${drop}% on last tank — possible fuel theft / engine issue</div>`:""}
+          <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:10px">${docPill("INS",v.insuranceExpiry)}${docPill("PUC",v.pucExpiry)}${docPill("FIT",v.fitnessExpiry,typeNeedsFitness(v.type))}</div>
+          <div style="border-top:1px solid var(--line);margin-top:10px;padding-top:8px;font-size:12px">${lastFuelLine(v)}</div>
+          <div style="margin-top:4px;font-size:12px">${svcLine(v)}</div>
           <div style="display:flex;gap:7px;margin-top:11px"><button class="btn y vQFuel" data-id="${esc(v.id)}" style="flex:1;padding:7px;font-size:12px">⛽ Fuel</button><button class="btn vQSvc" data-id="${esc(v.id)}" style="flex:1;padding:7px;font-size:12px">🔧 Service</button></div>
         </div>`; }).join("")}
     </div>
@@ -1156,8 +1170,8 @@ async function renderFleet(){
       <div class="card"><div style="display:flex;align-items:center;margin-bottom:6px"><b style="font-size:14.5px">Alerts</b><span style="margin-left:auto;font-size:12px;color:var(--soft)">${allAlerts.length} need action</span></div>
         ${allAlerts.length?allAlerts.slice(0,8).map(o=>{ const exp=/EXPIRED|OVERDUE/.test(o.a); return `<div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--line)"><span style="width:30px;height:30px;border-radius:8px;background:${exp?'#FBEAE5':'#FFF6DC'};display:flex;align-items:center;justify-content:center;flex:0 0 auto">${exp?'⚠️':'🔧'}</span><div style="flex:1;min-width:0"><b style="font-size:12.5px">${esc(o.a)}</b><br><span style="font-size:11px;color:var(--soft)">${esc(o.v.number||o.v.name||"Vehicle")}${o.v.model?" · "+esc(o.v.model):""}</span></div></div>`; }).join(""):`<div style="color:var(--green);font-size:13px;padding:10px 0">✓ All vehicles up to date.</div>`}
       </div>
-      <div class="card"><div style="display:flex;align-items:center;margin-bottom:10px"><b style="font-size:14.5px">Fuel economy</b><span style="margin-left:auto;font-size:11.5px;color:var(--soft)">km / litre</span></div>
-        ${(()=>{ const fe=V.map(v=>({v,ec:vehEconomy(v)})).filter(o=>o.ec>0).sort((a,b)=>b.ec-a.ec), mx=Math.max(1,...fe.map(o=>o.ec)); return fe.length?fe.map(o=>`<div style="margin-bottom:11px"><div style="display:flex;font-size:12.5px;font-weight:700"><span style="flex:1">${esc(o.v.number||o.v.name)}${o.v.model?` · <span style="color:var(--soft);font-weight:400">${esc(o.v.model)}</span>`:""}</span><span style="color:var(--brand-d)">${o.ec.toFixed(0)}</span></div><div class="bar" style="margin-top:5px"><i style="width:${Math.round(o.ec*100/mx)}%"></i></div></div>`).join(""):`<div style="color:var(--soft);font-size:13px">No fuel logs yet.</div>`; })()}
+      <div class="card"><div style="display:flex;align-items:center;margin-bottom:10px"><b style="font-size:14.5px">Running cost · this month</b><span style="margin-left:auto;font-size:11.5px;color:var(--soft)">₹ / km · lower is better</span></div>
+        ${(()=>{ const fe=V.map(v=>({v,m:vehMonth(v),ec:vehEconomy(v)})).filter(o=>o.m.cpk>0||o.ec>0).sort((a,b)=>(b.m.cpk||0)-(a.m.cpk||0)); const mxC=Math.max(.01,...fe.map(o=>o.m.cpk||0)), mxE=Math.max(1,...fe.map(o=>o.ec||0)); return fe.length?fe.map(o=>`<div style="margin-bottom:13px"><div style="display:flex;align-items:center;font-size:12.5px;font-weight:700;gap:8px"><span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(o.v.number||o.v.name)}${o.v.model?` · <span style="color:var(--soft);font-weight:400">${esc(o.v.model)}</span>`:""}</span>${o.m.cpk?`<span style="color:var(--danger);font-weight:800">₹${o.m.cpk.toFixed(2)}/km</span>`:""}${o.ec?`<span style="color:var(--brand-d);font-size:11px">${o.ec.toFixed(1)} km/l</span>`:""}</div>${o.m.cpk?`<div class="bar" style="margin-top:5px;height:6px;background:#FBEAE5"><i style="width:${Math.round(o.m.cpk*100/mxC)}%;background:var(--danger)"></i></div>`:""}${o.ec?`<div class="bar" style="margin-top:3px;height:5px"><i style="width:${Math.round(o.ec*100/mxE)}%"></i></div>`:""}</div>`).join(""):`<div style="color:var(--soft);font-size:13px">No fuel logs yet.</div>`; })()}
       </div>
     </div>`;
   document.querySelectorAll("#fleet .fvTab").forEach(b=>b.onclick=()=>{ _fleetView=b.dataset.v; renderFleet(); });
@@ -1236,6 +1250,18 @@ const fleetRid=()=>Math.random().toString(36).slice(2,10);
 function vehEconomy(v){ const s=(v.fuelLogs||[]).filter(f=>f.odometer>0&&f.litres>0).sort((a,b)=>a.odometer-b.odometer); if(s.length<2)return 0; const dist=s[s.length-1].odometer-s[0].odometer, lit=s.reduce((a,b)=>a+(b.litres||0),0)-s[0].litres; return (lit>0&&dist>0)?dist/lit:0; }
 // Mileage for the latest tank (between the last two fills) — km covered ÷ litres put in at the last fill.
 function vehTripMileage(v){ const s=(v.fuelLogs||[]).filter(f=>f.odometer>0&&f.litres>0).sort((a,b)=>a.odometer-b.odometer); if(s.length<2)return 0; const a=s[s.length-2], b=s[s.length-1], dist=b.odometer-a.odometer, lit=b.litres||0; return (lit>0&&dist>0)?dist/lit:0; }
+// This-month metrics (calendar month) — distance, fuel ₹, litres, ₹/km, all from fuel logs.
+function vehMonth(v){ const now=new Date(), mStart=new Date(now.getFullYear(),now.getMonth(),1).getTime();
+  const logs=(v.fuelLogs||[]).filter(f=>(f.date||0)>=mStart && f.odometer>0).sort((a,b)=>a.odometer-b.odometer);
+  const all=(v.fuelLogs||[]).filter(f=>f.odometer>0).sort((a,b)=>a.odometer-b.odometer);
+  const fuel=logs.reduce((a,b)=>a+(b.amount||0),0), litres=logs.reduce((a,b)=>a+(b.litres||0),0);
+  // Distance this month: from the fill just before the month started (if any) to the latest fill in month
+  let km=0; if(logs.length){ const last=logs[logs.length-1].odometer; const earlier=all.filter(f=>f.odometer<=logs[0].odometer); const start=earlier.length?earlier[earlier.length-1].odometer:logs[0].odometer; km=Math.max(0,last-start); }
+  const cpk=km>0?fuel/km:0;
+  return {km,fuel,litres,cpk,fills:logs.length};
+}
+// Mileage-drop flag: latest tank << lifetime by 20%+ (and we have ≥3 fills total) — early warning for fuel theft / engine issues.
+function vehMileageDrop(v){ const ec=vehEconomy(v), tm=vehTripMileage(v); if(ec>0&&tm>0&&(v.fuelLogs||[]).length>=3&&tm<ec*0.8) return Math.round((1-tm/ec)*100); return 0; }
 const typeNeedsFitness=t=>t!=="Bike"&&t!=="Car"; // fitness certificate = commercial vehicles only (not Bike/Car)
 function vehAlerts(v){ const out=[], km=v.currentKm||0; (v.maintItems||[]).forEach(mi=>{ if(mi.lastKm>0&&mi.intervalKm>0){ const rem=mi.lastKm+mi.intervalKm-km; if(rem<=0)out.push(`${mi.name} OVERDUE`); else if(rem<=500)out.push(`${mi.name} in ${rem}km`);} });
   const dd=e=>e>0?Math.floor((e-Date.now())/86400000):null; const dc=(n,e)=>{const x=dd(e); if(x===null)return; if(x<0)out.push(`${n} EXPIRED`); else if(x<=15)out.push(`${n} in ${x}d`);}; dc("Insurance",v.insuranceExpiry); dc("PUC",v.pucExpiry); if(typeNeedsFitness(v.type)) dc("Fitness",v.fitnessExpiry); const _nd=(v.serviceLogs||[]).map(s=>s.nextDue||0).filter(Boolean); if(_nd.length) dc("Service",Math.max(..._nd)); return out; }

@@ -53,6 +53,7 @@ import com.receegpsstamp.data.auth.PhoneAuthState
 import com.receegpsstamp.ui.theme.AppYellow
 import com.receegpsstamp.ui.theme.BrandGradient
 import com.receegpsstamp.ui.theme.SplashBg
+import kotlinx.coroutines.flow.first
 
 private val BoxBg = Color(0xFF1A2530)
 private val BoxBorder = Color(0xFF2A3540)
@@ -66,6 +67,7 @@ fun LoginScreen(
     val profile by viewModel.profile.collectAsStateWithLifecycle()
     val phoneState by viewModel.phoneState.collectAsStateWithLifecycle()
     var showProfile by remember { mutableStateOf(false) }
+    var checking by remember { mutableStateOf(false) }
     var pName by rememberSaveable { mutableStateOf("") }
     var pSurname by rememberSaveable { mutableStateOf("") }
     var pMobile by rememberSaveable { mutableStateOf("") }
@@ -86,9 +88,19 @@ fun LoginScreen(
             if (profile.isComplete) {
                 onSignedIn()
             } else {
-                // Pre-fill name/surname from Google; ask mobile.
-                pName = profile.name; pSurname = profile.surname; pMobile = profile.mobile
-                showProfile = true
+                // Returning user signing in on a fresh device: their profile is saved in the cloud but
+                // pulls down asynchronously. Wait briefly for it before re-asking the name.
+                checking = true
+                val synced = kotlinx.coroutines.withTimeoutOrNull(4000) { viewModel.profile.first { it.isComplete } }
+                checking = false
+                if (synced != null) {
+                    onSignedIn()
+                } else {
+                    // New user (no saved profile) — ask name once. Pre-fill anything from Google.
+                    val p = viewModel.profile.value
+                    pName = p.name; pSurname = p.surname; pMobile = p.mobile
+                    showProfile = true
+                }
             }
         } else if (uiState is LoginUiState.Error) {
             // Make the failure unmissable so the real cause can be diagnosed.
@@ -126,7 +138,15 @@ fun LoginScreen(
         )
         Spacer(Modifier.height(22.dp))
 
-        if (!showProfile) {
+        if (checking) {
+            Spacer(Modifier.height(30.dp))
+            CircularProgressIndicator(Modifier.align(Alignment.CenterHorizontally), color = AppYellow, strokeWidth = 2.5.dp)
+            Spacer(Modifier.height(14.dp))
+            Text(
+                "Setting up your account…", fontSize = 13.sp, color = Color.White.copy(alpha = 0.6f),
+                textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth(),
+            )
+        } else if (!showProfile) {
         // What the app does
         FeatureRow("GPS location, address & time stamped on every photo")
         FeatureRow("Organise recces by company & distributor")

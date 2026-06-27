@@ -44,7 +44,12 @@ import javax.inject.Singleton
  * Data model: the whole local [LocalStore.Db] (+ the [ProfileStore] profile) is mirrored to
  * `users/{uid}/backup/<collection>`, one document per collection holding that list as a JSON string.
  * Splitting per collection (rather than one blob) keeps each doc well under Firestore's 1 MiB limit.
- * Overwriting the arrays each time naturally carries adds, edits AND deletes — no per-record diffing.
+ *
+ * Cloud retention (server is the company record): user-deletable collections (shops, recces,
+ * expenses, installs, vehicles, fuelLogs, serviceLogs) are MERGED with cloud on backup — items the
+ * user removed locally STAY on the server until an admin permanently deletes them. Local versions
+ * win for shared ids (so user edits are honoured). Catalog (companies/distributors), drafts, and
+ * profile are still overwritten — they're managed centrally / locally only.
  *
  * Photos: the JSON only stores file paths. The actual image files are uploaded to
  * `users/{uid}/files/<relativePath>` (the path under getExternalFilesDir, which is reproducible on
@@ -210,24 +215,34 @@ class FirestoreSync @Inject constructor(
     private fun backupCollection(uid: String) =
         firestore.collection("users").document(uid).collection("backup")
 
-    /** Mirrors the whole local DB to Firestore as per-collection JSON docs. No-op when signed out. */
+    /** Mirrors the whole local DB to Firestore as per-collection JSON docs. No-op when signed out.
+     *  Cloud retention: user-deletable collections are MERGED with existing cloud data — items the
+     *  user deleted locally STAY on the server until an admin removes them. */
     suspend fun backup(): Result = withContext(Dispatchers.IO) {
         val uid = auth.currentUser?.uid ?: return@withContext Result(false, "Not signed in")
         try {
             val db = localStore.db.value
             val now = System.currentTimeMillis()
             val col = backupCollection(uid)
+            // Pre-read cloud so we can preserve user-deleted items (server is the company record).
+            val cloudShops = readCloudList<Shop>(uid, "shops")
+            val cloudRecces = readCloudList<RecceEntry>(uid, "recces")
+            val cloudExpenses = readCloudList<Expense>(uid, "expenses")
+            val cloudInstalls = readCloudList<InstallEntry>(uid, "installs")
+            val cloudVehicles = readCloudList<Vehicle>(uid, "vehicles")
+            val cloudFuel = readCloudList<FuelLog>(uid, "fuelLogs")
+            val cloudService = readCloudList<ServiceLog>(uid, "serviceLogs")
             firestore.runBatch { b ->
                 b.set(col.document("companies"), doc(gson.toJson(db.companies), now))
                 b.set(col.document("distributors"), doc(gson.toJson(db.distributors), now))
-                b.set(col.document("shops"), doc(gson.toJson(db.shops), now))
-                b.set(col.document("recces"), doc(gson.toJson(db.recces), now))
+                b.set(col.document("shops"), doc(gson.toJson(mergeById(db.shops, cloudShops) { it.id }), now))
+                b.set(col.document("recces"), doc(gson.toJson(mergeById(db.recces, cloudRecces) { it.id }), now))
                 b.set(col.document("drafts"), doc(gson.toJson(db.drafts), now))
-                b.set(col.document("expenses"), doc(gson.toJson(db.expenses), now))
-                b.set(col.document("installs"), doc(gson.toJson(db.installs), now))
-                b.set(col.document("vehicles"), doc(gson.toJson(db.vehicles), now))
-                b.set(col.document("fuelLogs"), doc(gson.toJson(db.fuelLogs), now))
-                b.set(col.document("serviceLogs"), doc(gson.toJson(db.serviceLogs), now))
+                b.set(col.document("expenses"), doc(gson.toJson(mergeById(db.expenses, cloudExpenses) { it.id }), now))
+                b.set(col.document("installs"), doc(gson.toJson(mergeById(db.installs, cloudInstalls) { it.id }), now))
+                b.set(col.document("vehicles"), doc(gson.toJson(mergeById(db.vehicles, cloudVehicles) { it.id }), now))
+                b.set(col.document("fuelLogs"), doc(gson.toJson(mergeById(db.fuelLogs, cloudFuel) { it.id }), now))
+                b.set(col.document("serviceLogs"), doc(gson.toJson(mergeById(db.serviceLogs, cloudService) { it.id }), now))
                 b.set(col.document("profile"), doc(gson.toJson(profileStore.profile.value), now))
             }.await()
             backupPhotos(uid)
@@ -235,6 +250,23 @@ class FirestoreSync @Inject constructor(
         } catch (e: Exception) {
             Result(false, "Cloud backup failed: ${e.message ?: "unknown error"}")
         }
+    }
+
+    /** Read an existing cloud list for the given backup collection (returns empty on miss / parse error). */
+    private suspend inline fun <reified T> readCloudList(uid: String, coll: String): List<T> = try {
+        val snap = backupCollection(uid).document(coll).get().await()
+        val json = snap.getString("json") ?: "[]"
+        val type = TypeToken.getParameterized(List::class.java, T::class.java).type
+        gson.fromJson<List<T>>(json, type) ?: emptyList()
+    } catch (e: Exception) { emptyList() }
+
+    /** Merge local + cloud lists by id — cloud-only items are preserved (so user-deleted items stay
+     *  on the server until admin removes them), local versions win for shared ids. */
+    private inline fun <T> mergeById(local: List<T>, cloud: List<T>, idOf: (T) -> String): List<T> {
+        val out = LinkedHashMap<String, T>()
+        cloud.forEach { out[idOf(it)] = it }
+        local.forEach { out[idOf(it)] = it }
+        return out.values.toList()
     }
 
     /** Pulls the cloud backup and REPLACES all local data. Returns a user-facing message. */

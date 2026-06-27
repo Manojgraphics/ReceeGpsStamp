@@ -492,15 +492,32 @@ function openSurveyor(uid){
   const m=$("#modal"); m.classList.remove("hidden");
   m.innerHTML=`<div class="modalbox">
     <div style="display:flex;align-items:center;gap:10px"><div class="logo" style="margin:0;width:42px;height:42px;font-size:14px">${esc((s.name||"?").slice(0,2).toUpperCase())}</div>
-      <div><h3 style="margin:0">${esc(s.name)}</h3><div style="font-size:12px;color:var(--soft)">${esc(s.mobile||"")}${s.mobile?" · ":""}${esc(RANGE.label)}</div></div></div>
+      <div><h3 style="margin:0">${esc(s.name)}</h3><div style="font-size:12px;color:var(--soft)">${s.mobile?`<a href="tel:${esc(s.mobile)}" style="color:var(--amber)">📞 ${esc(s.mobile)}</a> · `:""}${esc(RANGE.label)}</div></div></div>
     <div class="grid" style="margin-top:12px">${stat("Surveyed",s.surveyed,'hero')}${stat("Interested",s.interested)}${stat("Conversion",conv+"%")}${stat("Spent",money(s.spent))}${stat("Advance",money(s.advance))}${stat(bal>=0?"To return":"Overspent",money(Math.abs(bal)))}</div>
     ${tgt?`<div class="sec">TARGET</div><div class="card"><div class="bar"><i style="width:${pct}%"></i></div><div style="font-size:12px;color:var(--soft);margin-top:6px">${pct}% · ${s.surveyed}/${tgt}</div></div>`:''}
     <div class="sec">RECENT RECCES (${r.length})</div>
     <div class="tablewrap" style="max-height:260px;overflow:auto"><table><tr><th>Shop</th><th>City</th><th>Status</th><th>Date</th><th>📷</th></tr>
       ${r.slice(0,40).map(x=>`<tr><td class="wrap"><b>${esc(x.shop)}</b></td><td>${esc(x.city)}</td><td><span class="pill ${(x.status||"").replace(/ /g,"")}">${esc(x.status)}</span></td><td>${fmtDate(x.date)}</td><td>${x.photos.length||"—"}</td></tr>`).join("")||`<tr><td colspan="5" style="color:var(--soft);padding:14px">No recces in this period.</td></tr>`}
     </table></div>
-    <div style="text-align:right;margin-top:10px"><button class="btn y" id="suCls">Close</button></div></div>`;
+    <div style="text-align:right;margin-top:10px"><button class="btn" id="suExp">⬇ Export CSV</button> <button class="btn y" id="suCls">Close</button></div></div>`;
   m.onclick=ev=>{ if(ev.target===m) m.classList.add("hidden"); }; $("#suCls").onclick=()=>m.classList.add("hidden");
+  $("#suExp").onclick=()=>exportSurveyor(uid);
+}
+
+// Admin: export one field user's full data (recces + expenses) as a CSV the admin can keep.
+function exportSurveyor(uid){
+  const s=fSurveyors().find(x=>x.uid===uid); if(!s) return;
+  const r=fRecces().filter(x=>x.uid===uid).sort((a,b)=>(b.date||0)-(a.date||0));
+  const e=fExpenses().filter(x=>x.uid===uid);
+  const q=v=>{ const t=(v==null?"":String(v)); return /[",\n]/.test(t)?'"'+t.replace(/"/g,'""')+'"':t; };
+  const rows=[["Type","Shop","City","Status","Project","Date","Photos","Lat","Lng","Amount","Category","Payment"]];
+  r.forEach(x=>rows.push(["Recce",x.shop,x.city,x.status,x.project,fmtDate(x.date),x.photos?x.photos.length:0,x.lat||"",x.lng||"","","",""]));
+  e.forEach(x=>rows.push([x.kind==="ADVANCE"?"Advance":"Expense","","","",x.projectName||"",fmtDate(x.date),"","","",x.amount||0,x.category||"",x.paymentMode||""]));
+  const csv=rows.map(row=>row.map(q).join(",")).join("\r\n");
+  const blob=new Blob(["﻿"+csv],{type:"text/csv;charset=utf-8"});
+  const a=document.createElement("a"); a.href=URL.createObjectURL(blob);
+  a.download=`${(s.name||"field_user").replace(/[^a-z0-9]+/gi,"_")}_data.csv`;
+  document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(a.href);
 }
 
 // ── Weekly report PDF ──

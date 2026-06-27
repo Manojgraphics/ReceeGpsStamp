@@ -1042,7 +1042,7 @@ async function renderFleet(){
           </div>
           <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:11px">${docPill("INS",v.insuranceExpiry)}${docPill("PUC",v.pucExpiry)}${docPill("FIT",v.fitnessExpiry,typeNeedsFitness(v.type))}</div>
           <div style="border-top:1px solid var(--line);margin-top:11px;padding-top:9px;font-size:12px">${svcLine(v)}</div>
-          <div style="display:flex;gap:7px;margin-top:11px"><button class="btn y vQFuel" data-id="${esc(v.id)}" style="flex:1;padding:7px;font-size:12px">⛽ Add fuel</button><button class="btn vQSvc" data-id="${esc(v.id)}" style="flex:1;padding:7px;font-size:12px">🔧 Service</button></div>
+          <div style="display:flex;gap:7px;margin-top:11px"><button class="btn y vQFuel" data-id="${esc(v.id)}" style="flex:1;padding:7px;font-size:12px">⛽ Fuel</button><button class="btn vQSvc" data-id="${esc(v.id)}" style="flex:1;padding:7px;font-size:12px">🔧 Service</button><button class="btn vQEdit" data-id="${esc(v.id)}" style="padding:7px 11px;font-size:12px" title="Edit vehicle details">✏️</button></div>
         </div>`; }).join("")}
       <div class="card" id="vAddCard" style="cursor:pointer;display:flex;align-items:center;justify-content:center;min-height:150px;border:1.5px dashed var(--line);color:var(--soft);font-weight:700;font-size:14px">+ Add vehicle</div>
     </div>
@@ -1060,6 +1060,7 @@ async function renderFleet(){
   document.querySelectorAll("#fleet .vehCard").forEach(c=>c.onclick=()=>{ const v=V.find(x=>x.id===c.dataset.id); if(v) openVehicle(v); });
   document.querySelectorAll("#fleet .vQFuel").forEach(b=>b.onclick=e=>{ e.stopPropagation(); const v=V.find(x=>x.id===b.dataset.id); if(v) fuelForm(v); });
   document.querySelectorAll("#fleet .vQSvc").forEach(b=>b.onclick=e=>{ e.stopPropagation(); const v=V.find(x=>x.id===b.dataset.id); if(v) serviceForm(v); });
+  document.querySelectorAll("#fleet .vQEdit").forEach(b=>b.onclick=e=>{ e.stopPropagation(); const v=V.find(x=>x.id===b.dataset.id); if(v) vehicleForm(v); });
 }
 // ── Vehicles — full fleet management on the shared `fleet` collection (app + web, one source) ──
 const FLEET_TYPES=["Bike","Car","Transport vehicle","Other"];

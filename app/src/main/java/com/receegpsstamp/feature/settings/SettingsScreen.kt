@@ -328,6 +328,14 @@ fun SettingsScreen(
                             "Sign out", fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = StatusError,
                             modifier = Modifier.fillMaxWidth().clickable { viewModel.signOut(); onSignedOut() },
                         )
+                        // Debug-only: verify Crashlytics end-to-end. Never compiled into release builds.
+                        if (com.receegpsstamp.BuildConfig.DEBUG) {
+                            SettingDivider()
+                            Text(
+                                "🧪 Test crash (Crashlytics)", fontSize = 13.sp, fontWeight = FontWeight.Medium, color = NeutralTextSoft,
+                                modifier = Modifier.fillMaxWidth().clickable { throw RuntimeException("Crashlytics test crash") },
+                            )
+                        }
                     } else {
                         AccountPhoneSignIn(
                             phoneState = phoneState,

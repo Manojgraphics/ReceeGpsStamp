@@ -96,6 +96,17 @@
   .suChip.on{background:var(--brand);border-color:var(--brand);color:var(--brand-text)}
   .suChip.on::before{content:"✓ "}
   @media print{.topbar,.sidebar,.filters,.btn,#modal,#rangebar{display:none!important}.main{padding:0}.layout{display:block}}
+  /* Mobile: stack the sidebar into a horizontal scrolling nav so the dashboard works on a phone. */
+  @media (max-width:760px){
+    .topbar{padding:0 12px;gap:10px}
+    .layout{flex-direction:column}
+    .sidebar{width:100%;height:auto;position:static;flex-direction:row;overflow-x:auto;padding:6px 8px;gap:4px;border-bottom:1px solid var(--line)}
+    .nav-section{display:none}
+    .nav-item{flex:0 0 auto;white-space:nowrap;padding:8px 12px;font-size:13px}
+    .nav-item.on::before{left:8px;right:8px;top:auto;bottom:0;width:auto;height:3px;border-radius:3px 3px 0 0}
+    .main{padding:14px 12px 50px}
+    .modalbox{max-width:94vw}
+  }
 </style>
 </head>
 <body>

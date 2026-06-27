@@ -2227,6 +2227,8 @@ function renderSetup(){
   const allOk=sOk.every(Boolean);
   const started=!!(dist&&dist.started);
   const startedAt=dist&&dist.startedAt||0;
+  const completed=!!(dist&&dist.completed);
+  const completedAt=dist&&dist.completedAt||0;
   const stepBadge=(n,label,ok,active)=>{ const bg=ok?"#1B873F":active?"var(--brand)":"var(--line)"; const fg=ok||active?"#fff":"var(--soft)"; return `<div style="display:inline-flex;align-items:center;gap:6px;padding:6px 12px;border-radius:50px;background:${ok?"#E8F5EC":active?"var(--brand)":"var(--bg)"};color:${ok?"#1B873F":active?"var(--brand-text)":"var(--soft)"};font-size:12px;font-weight:700;white-space:nowrap"><span style="display:inline-flex;align-items:center;justify-content:center;width:18px;height:18px;border-radius:50%;background:${bg};color:${fg};font-size:11px">${ok?"✓":n}</span>${label}</div>`; };
   // The "active" step = first incomplete (when nothing complete, step 1)
   const activeStep=sOk.findIndex(x=>!x); // -1 if all ok
@@ -2245,7 +2247,7 @@ function renderSetup(){
         <div class="card" style="padding:18px;${sOk[1]?"":sOk[0]?"border:1.5px solid var(--brand);":""}"><b style="font-size:14.5px">${numBadge(1,sOk[0])}Company</b>
           <div style="margin-top:11px"><select id="suCo" style="width:100%">${comps.map(c=>`<option value="${esc(c.name)}" ${c.name===_suCo?"selected":""}>${esc(c.name)}</option>`).join("")}</select></div>
           <b style="font-size:14.5px;display:block;margin-top:18px">${numBadge(2,sOk[1])}Distributor</b>
-          <div style="margin-top:11px"><select id="suDist" style="width:100%">${dists.length?dists.map(d=>`<option value="${esc(d.id)}" ${d.id===_suDist?"selected":""}>${esc(d.name)}${d.city?" · "+esc(d.city):""}${d.started?" ✓":""}</option>`).join(""):`<option value="">— none yet —</option>`}</select></div>
+          <div style="margin-top:11px"><select id="suDist" style="width:100%">${dists.length?dists.map(d=>`<option value="${esc(d.id)}" ${d.id===_suDist?"selected":""}>${esc(d.name)}${d.city?" · "+esc(d.city):""}${d.completed?" · 🏁 done":d.started?" · ✓ started":""}</option>`).join(""):`<option value="">— none yet —</option>`}</select></div>
           <div style="display:flex;gap:8px;margin-top:10px"><button class="btn" id="suAddDist" style="flex:1">+ Add distributor</button>${dist?`<button class="btn dEditOne" style="padding:6px 10px" title="Rename this distributor">✏️</button><button class="btn dDelOne" style="background:#FBEAE5;color:var(--danger);padding:6px 10px" title="Remove this distributor">🗑️</button>`:""}</div>
         </div>
         <div class="card" style="padding:18px;${activeStep===4?"border:1.5px solid var(--brand);":""}"><b style="font-size:14.5px">${numBadge(5,sOk[4])}Work mode</b>
@@ -2270,15 +2272,14 @@ function renderSetup(){
         </div>
       </div>
     </div>
-    <div class="card" style="margin-top:14px;padding:18px;background:${started?"linear-gradient(135deg,#E8F5EC 0%,var(--card) 100%)":allOk?"linear-gradient(135deg,#FFF6DC 0%,var(--card) 100%)":"var(--card)"};border:${allOk?"1.5px solid var(--brand)":"1px solid var(--line)"}">
+    <div class="card" style="margin-top:14px;padding:18px;background:${completed?"linear-gradient(135deg,#E0F2FF 0%,var(--card) 100%)":started?"linear-gradient(135deg,#E8F5EC 0%,var(--card) 100%)":allOk?"linear-gradient(135deg,#FFF6DC 0%,var(--card) 100%)":"var(--card)"};border:${completed?"1.5px solid #5DA9E9":allOk?"1.5px solid var(--brand)":"1px solid var(--line)"}">
       <div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap">
-        <div style="font-size:34px;flex:0 0 auto">${started?"✅":"🚀"}</div>
+        <div style="font-size:34px;flex:0 0 auto">${completed?"🏁":started?"✅":"🚀"}</div>
         <div style="flex:1;min-width:200px">
-          <div style="font-size:16px;font-weight:800">${started?"Project started":"Ready to start?"}</div>
-          <div style="font-size:12px;color:var(--soft);margin-top:2px">${started?`Started ${stage?"in "+stage+" mode ":""}${startedAt?"on "+new Date(startedAt).toLocaleDateString("en-IN",{day:"numeric",month:"short",year:"numeric"}):""} · assign to any field user below`:allOk?`All 5 steps done — start <b>${esc(_suCo)} · ${esc(dist?dist.name:"")}</b> and then assign`:`Complete step ${activeStep+1} of 5 to start the project`}</div>
+          <div style="font-size:16px;font-weight:800">${completed?"Project completed · unlinked from team":started?"Project started":"Ready to start?"}</div>
+          <div style="font-size:12px;color:var(--soft);margin-top:2px">${completed?`Completed${completedAt?" on "+new Date(completedAt).toLocaleDateString("en-IN",{day:"numeric",month:"short",year:"numeric"}):""} — no longer in any field user's app. Data preserved on server. Re-open if needed.`:started?`Started ${stage?"in "+stage+" mode ":""}${startedAt?"on "+new Date(startedAt).toLocaleDateString("en-IN",{day:"numeric",month:"short",year:"numeric"}):""} · assign to any field user below · mark <b>🏁 Complete</b> when done`:allOk?`All 5 steps done — start <b>${esc(_suCo)} · ${esc(dist?dist.name:"")}</b> and then assign`:`Complete step ${activeStep+1} of 5 to start the project`}</div>
         </div>
-        ${started?`<button class="btn" id="suResetStart" style="background:var(--bg);font-size:12px">↺ Reset</button>`:""}
-        <button class="btn y" id="suStart" ${(!allOk)?"disabled":""} style="padding:11px 22px;font-size:14px">${started?"Re-confirm":"🚀 Start project"}</button>
+        ${completed?`<button class="btn y" id="suReopen" style="padding:9px 16px;font-size:13px">↻ Re-open</button>`:started?`<button class="btn" id="suResetStart" style="background:var(--bg);font-size:12px">↺ Reset</button><button class="btn" id="suComplete" style="padding:11px 22px;font-size:14px;background:#E0F2FF;color:#0858A3;border:none;font-weight:700">🏁 Mark complete</button><button class="btn y" id="suStart" style="padding:11px 22px;font-size:14px">Re-confirm</button>`:`<button class="btn y" id="suStart" ${(!allOk)?"disabled":""} style="padding:11px 22px;font-size:14px">🚀 Start project</button>`}
       </div>
     </div>
     <div class="sec">📌 Assign to a field user</div>
@@ -2301,6 +2302,8 @@ function renderSetup(){
   { const im=$("#suImport"); if(im) im.onclick=()=>importShopsDialog(dist); }
   { const sb=$("#suStart"); if(sb) sb.onclick=()=>startProject(_suDist,_suCo); }
   { const rb=$("#suResetStart"); if(rb) rb.onclick=()=>resetProjectStart(_suDist); }
+  { const cb=$("#suComplete"); if(cb) cb.onclick=()=>completeProject(_suDist,_suCo); }
+  { const rb=$("#suReopen"); if(rb) rb.onclick=()=>reopenProject(_suDist); }
   $("#apGo").onclick=async()=>{
     const uid=$("#apSur").value; if(!uid){ alert("Choose a field user"); return; }
     if(!dist){ alert("Pick a distributor first"); return; }
@@ -2346,6 +2349,41 @@ async function resetProjectStart(distId){
   const d=(CATALOG.distributors||[]).find(x=>x.id===distId); if(!d) return;
   if(!confirm(`Reset "${d.name}" back to not-started? (Keeps all data — only clears the "Started" flag.)`)) return;
   try{ const {comps,dists}=await loadCat(); const i=dists.findIndex(x=>x.id===distId); if(i<0)return; delete dists[i].started; delete dists[i].startedAt; delete dists[i].startedMode; await saveCatalog(comps,dists); logAudit("setup",`Reset project "${d.name}" to not started`); renderSetup(); }catch(e){ alert("Save failed: "+(e.message||e)); }
+}
+// Mark a project complete: catalog flag + unlink from EVERY field user's assignments (project + shops).
+// Data on server stays untouched (recces, shops, expenses already in backup). App users simply won't
+// see this project in their picker anymore. Admin can re-open any time → projects come back into picker.
+async function completeProject(distId, coName){
+  if(!distId) return;
+  const d=(CATALOG.distributors||[]).find(x=>x.id===distId); if(!d) return;
+  if(!confirm(`Mark "${d.name}" as COMPLETE?\n\n• Removes the project from every field user's app (won't show in their picker).\n• All recces / shops / expenses / installs / photos for this project STAY on the server (company record preserved).\n• You can re-open it any time — it'll come back into the team's app.\n\nContinue?`)) return;
+  try{
+    const {comps,dists}=await loadCat();
+    const i=dists.findIndex(x=>x.id===distId); if(i<0) return;
+    dists[i].completed=true; dists[i].completedAt=Date.now(); dists[i].completedBy=(auth.currentUser&&auth.currentUser.email)||"";
+    await saveCatalog(comps,dists);
+    // Cascade: remove this project (by name, case-insensitive) from every field user's assignments doc.
+    const oldName=(d.name||"").toLowerCase(); let touched=0;
+    for(const s of ((DATA&&DATA.surveyors)||[])){
+      try{
+        const aRef=doc(db,"assignments",s.uid); const as=await getDoc(aRef);
+        if(!as.exists()) continue;
+        const a=as.data()||{}; const ps=(a.projects||[]).filter(p=>(p.name||"").toLowerCase()!==oldName); const sh=(a.shops||[]).filter(x=>(x.project||"").toLowerCase()!==oldName);
+        if(ps.length!==(a.projects||[]).length || sh.length!==(a.shops||[]).length){
+          await setDoc(aRef,{projects:ps,shops:sh,updatedAt:Date.now()},{merge:true}); touched++;
+        }
+      }catch(e){}
+    }
+    logAudit("setup",`🏁 Marked project "${coName} / ${d.name}" complete — unlinked from ${touched} field user${touched===1?"":"s"} (data preserved)`);
+    alert(`✓ "${d.name}" marked complete. Unlinked from ${touched} field user${touched===1?"":"s"} · all data on server is preserved.`);
+    renderSetup();
+  }catch(e){ alert("Save failed: "+(e.message||e)); }
+}
+async function reopenProject(distId){
+  if(!distId) return;
+  const d=(CATALOG.distributors||[]).find(x=>x.id===distId); if(!d) return;
+  if(!confirm(`Re-open "${d.name}"?\n\nClears the Completed flag. Use "📌 Assign to a field user" below to push it back into someone's app.`)) return;
+  try{ const {comps,dists}=await loadCat(); const i=dists.findIndex(x=>x.id===distId); if(i<0)return; delete dists[i].completed; delete dists[i].completedAt; delete dists[i].completedBy; await saveCatalog(comps,dists); logAudit("setup",`Re-opened project "${d.name}" (admin: re-assign to a field user below to push it back to the team)`); renderSetup(); }catch(e){ alert("Save failed: "+(e.message||e)); }
 }
 async function removeDistributor(distId){ if(!distId)return; const d=(CATALOG.distributors||[]).find(x=>x.id===distId); if(!d)return; if(!confirm(`Remove distributor "${d.name}"? (Removes from the shared list; shops already pushed to field users stay.)`))return; try{ const {comps,dists}=await loadCat(); await saveCatalog(comps, dists.filter(x=>x.id!==distId)); _suDist=""; logAudit("setup",`Removed distributor ${d.name}`); renderSetup(); }catch(e){ alert("Save failed: "+(e.message||e)); } }
 // Rename a distributor + cascade the new name to every field user's local distributors + assignments

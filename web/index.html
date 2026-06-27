@@ -1328,30 +1328,49 @@ async function drawFleet(){
     el.querySelectorAll(".vQSvc").forEach(b=>b.onclick=e=>{ e.stopPropagation(); const v=list.find(x=>x.id===b.dataset.id); if(v) serviceForm(v); });
   }catch(e){ el.innerHTML=`<div class="loading">Error: ${esc(e.message||e)}</div>`; }
 }
+let _vTab="overview"; // overview | fuel | service | maint
 function openVehicle(v){
   const km=v.currentKm||0, ec=vehEconomy(v), tm=vehTripMileage(v);
   const _nd=(v.serviceLogs||[]).map(s=>s.nextDue||0).filter(Boolean); const nextSvc=_nd.length?Math.max(..._nd):0;
   const dueTxt=mi=>{ if(!(mi.lastKm>0&&mi.intervalKm>0))return '<span style="color:var(--soft)">not recorded</span>'; const rem=mi.lastKm+mi.intervalKm-km; return rem<=0?`<span style="color:var(--danger);font-weight:700">OVERDUE by ${-rem} km</span>`:`<span style="color:${rem<=500?'var(--brand-d)':'var(--soft)'}">in ${rem} km</span>`; };
   const docTxt=e=>{ if(!(e>0))return '<span style="color:var(--soft)">not set</span>'; const x=Math.floor((e-Date.now())/86400000); return x<0?`<span style="color:var(--danger);font-weight:700">EXPIRED</span>`:`<span style="color:${x<=15?'var(--brand-d)':'var(--soft)'}">${esc(new Date(e).toLocaleDateString("en-IN"))} (${x}d)</span>`; };
   const m=$("#modal"); m.classList.remove("hidden");
+  const fuelN=(v.fuelLogs||[]).length, svcN=(v.serviceLogs||[]).length;
+  const tab=(k,l)=>{ const on=_vTab===k; return `<button class="vTab" data-t="${k}" style="background:${on?'var(--brand)':'transparent'};color:${on?'var(--brand-text)':'var(--soft)'};border-radius:50px;padding:7px 16px;font-size:12.5px;font-weight:700;cursor:pointer;border:none">${l}</button>`; };
+  const overviewHtml=`
+    ${(v.chassis||v.engine||(v.lat&&v.lng))?`<div class="tablewrap" style="margin-top:0"><table><tr><th>Chassis</th><th>Engine</th><th>Last location</th></tr><tr><td>${esc(v.chassis||"—")}</td><td>${esc(v.engine||"—")}</td><td>${(v.lat&&v.lng)?`<a href="https://maps.google.com/?q=${v.lat},${v.lng}" target="_blank">📍 Map</a>`:"—"}</td></tr></table></div>`:""}
+    <div class="sec">DOCUMENTS</div>
+    <div class="tablewrap"><table><tr><th>Insurance</th><th>PUC</th>${typeNeedsFitness(v.type)?`<th>Fitness</th>`:``}<th>Next service due</th></tr><tr><td>${docTxt(v.insuranceExpiry)}</td><td>${docTxt(v.pucExpiry)}</td>${typeNeedsFitness(v.type)?`<td>${docTxt(v.fitnessExpiry)}</td>`:``}<td>${nextSvc?docTxt(nextSvc):'<span style="color:var(--soft)">not set</span>'}</td></tr></table></div>
+    <div class="filters" style="margin-top:14px"><button class="btn y" id="vFuel">⛽ Add fuel</button><button class="btn" id="vSvc">🔧 Add service</button><span style="font-size:11px;color:var(--soft);align-self:center;margin-left:auto">Edit vehicle details from <b>Manage vehicles</b></span></div>`;
+  const fuelHtml=`
+    <div style="display:flex;align-items:center;margin-bottom:10px"><b style="font-size:14.5px">Fuel log</b><span style="margin-left:auto;font-size:12px;color:var(--soft)">${fuelN} entr${fuelN===1?"y":"ies"}</span><button class="btn y" id="vFuel" style="margin-left:10px">⛽ Add fuel</button></div>
+    ${fuelN?`<div class="tablewrap"><table><tr><th>Date</th><th>Project</th><th>Odometer</th><th>Litres</th><th>₹</th><th></th></tr>${(v.fuelLogs||[]).slice().sort((a,b)=>(b.date||0)-(a.date||0)).map(f=>`<tr><td>${fmtDate(f.date)}</td><td>${esc(f.project||"—")}</td><td>${f.odometer} km</td><td>${(f.litres||0).toFixed(2)}</td><td>${money(f.amount||0)}</td><td style="white-space:nowrap"><span class="logEdit" data-id="${esc(f.id||"")}" title="Edit entry" style="color:var(--brand-d);cursor:pointer;font-weight:700;margin-right:10px">✏️</span><span class="logDel" data-kind="fuel" data-id="${esc(f.id||"")}" title="Delete entry" style="color:var(--danger);cursor:pointer;font-weight:700">✕</span></td></tr>`).join("")}</table></div>`:`<div class="card loading">No fuel logs yet. Tap <b>⛽ Add fuel</b> above.</div>`}`;
+  const svcHtml=`
+    <div style="display:flex;align-items:center;margin-bottom:10px"><b style="font-size:14.5px">Service log</b><span style="margin-left:auto;font-size:12px;color:var(--soft)">${svcN} entr${svcN===1?"y":"ies"}</span><button class="btn" id="vSvc" style="margin-left:10px">🔧 Add service</button></div>
+    ${svcN?`<div class="tablewrap"><table><tr><th>Date</th><th>Type</th><th>Project</th><th>Odometer</th><th>₹ Total</th><th>Parts</th><th>Labour</th><th>Garage</th><th>Next due</th><th>Bill</th><th></th></tr>${(v.serviceLogs||[]).slice().sort((a,b)=>(b.date||0)-(a.date||0)).map(s=>`<tr><td>${fmtDate(s.date)}</td><td>${esc(s.type||"")}</td><td>${esc(s.project||"—")}</td><td>${s.odometer} km</td><td>${money(s.amount||0)}</td><td>${money(Math.max(0,(s.amount||0)-(s.labour||0)))}</td><td>${s.labour?money(s.labour):"—"}</td><td>${esc(s.garage||"—")}${s.garagePhone?` <a href="tel:${esc(s.garagePhone)}" style="color:var(--brand-d);text-decoration:none">📞</a>`:""}</td><td>${s.nextDue?fmtDate(s.nextDue):"—"}</td><td>${s.billPhoto?`<span class="svBill" data-p="${esc(s.billPhoto)}" title="View bill" style="cursor:pointer;color:var(--brand-d)">${/\.pdf$/i.test(s.billPhoto)?"📄":"📷"}</span>`:"—"}</td><td style="white-space:nowrap"><span class="logEditSvc" data-id="${esc(s.id||"")}" title="Edit entry" style="color:var(--brand-d);cursor:pointer;font-weight:700;margin-right:10px">✏️</span><span class="logDel" data-kind="service" data-id="${esc(s.id||"")}" title="Delete entry" style="color:var(--danger);cursor:pointer;font-weight:700">✕</span></td></tr>`).join("")}</table></div>`:`<div class="card loading">No service logs yet. Tap <b>🔧 Add service</b> above.</div>`}`;
+  const items=(v.maintItems||[]).map(mi=>({...mi,name:normMaintName(mi.name)}));
+  const maintHtml=`
+    <div style="display:flex;align-items:center;margin-bottom:10px"><b style="font-size:14.5px">Maintenance status</b><span style="margin-left:auto;font-size:12px;color:var(--soft)">@ ${km.toLocaleString("en-IN")} km</span></div>
+    ${["Service","Repair"].map(cat=>{ const rows=items.filter(mi=>maintCatOf(mi.name)===cat); if(!rows.length) return ""; return `<div style="font-size:11px;color:var(--brand-d);font-weight:800;margin:8px 0 4px;letter-spacing:.3px">${cat==="Service"?"🔧 SERVICE":"🛠️ REPAIR"}</div><div class="tablewrap"><table><tr><th>Item</th><th>Interval</th><th>Last @</th><th>Status</th></tr>${rows.map(mi=>`<tr><td><b>${esc(mi.name)}</b></td><td>${mi.intervalKm||"—"} km</td><td>${mi.lastKm||"—"}</td><td>${dueTxt(mi)}</td></tr>`).join("")}</table></div>`; }).join("")||`<div class="card loading">No items.</div>`}
+    <div class="sec">EDIT INTERVALS</div>
+    <div style="font-size:11.5px;color:var(--soft);margin-bottom:8px">Set the km interval per item for this vehicle.</div>
+    ${["Service","Repair"].map(cat=>{ const g=items.map((mi,i)=>({mi,i})).filter(o=>maintCatOf(o.mi.name)===cat); if(!g.length) return ""; return `<div style="font-size:11px;color:var(--brand-d);font-weight:800;margin:10px 0 4px;letter-spacing:.3px">${cat==="Service"?"🔧 SERVICE":"🛠️ REPAIR"}</div><div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(160px,1fr))">${g.map(({mi,i})=>`<div><div style="font-size:11px;color:var(--soft);margin-bottom:3px">${esc(mi.name)} every</div><div style="display:flex;gap:5px"><input type="number" class="mIv" data-i="${i}" value="${mi.intervalKm||""}" style="flex:1;padding:7px 9px;border:1px solid var(--line);border-radius:8px;font-size:12.5px"><button class="mIRm" data-i="${i}" title="Remove item" style="background:#FBEAE5;color:var(--danger);border:none;border-radius:8px;padding:0 9px;cursor:pointer">✕</button></div></div>`).join("")}</div>`; }).join("")}
+    <div style="margin-top:14px;border-top:1px solid var(--line);padding-top:12px"><div style="font-size:11px;color:var(--soft);margin-bottom:5px;font-weight:700;letter-spacing:.3px">+ ADD CUSTOM ITEM</div><div style="display:flex;gap:7px;flex-wrap:wrap"><input type="text" id="mNewName" placeholder="Item name (e.g. Spark plug)" style="flex:2;min-width:140px;padding:7px 9px;border:1px solid var(--line);border-radius:8px;font-size:12.5px"><input type="number" id="mNewKm" placeholder="Interval km" style="width:120px;padding:7px 9px;border:1px solid var(--line);border-radius:8px;font-size:12.5px"><select id="mNewCat" style="padding:7px 9px;border:1px solid var(--line);border-radius:8px;font-size:12.5px"><option value="Service">Service</option><option value="Repair">Repair</option></select><button class="btn y" id="mAddItem">+ Add</button></div></div>
+    <div style="text-align:right;margin-top:14px"><button class="btn y" id="mSave">Save intervals</button></div>`;
+  const body = _vTab==="fuel"?fuelHtml : _vTab==="service"?svcHtml : _vTab==="maint"?maintHtml : overviewHtml;
   m.innerHTML=`<div class="modalbox">
     <div style="display:flex;align-items:center;gap:10px"><h3 style="margin:0">🚗 ${esc(v.name||v.number||"Vehicle")}</h3>${ec?`<span style="color:var(--brand-d);font-weight:700">${ec.toFixed(1)} km/l</span>`:""}</div>
     <div style="font-size:12px;color:var(--soft)">${[esc(v.number||""),esc([v.make,v.model].filter(Boolean).join(" ")),esc(fmtYM(v.year)),esc(v.type||""),`${km} km`].filter(Boolean).join(" · ")}</div>
     <div style="font-size:11.5px;color:var(--soft);margin-top:3px">⛽ Mileage — this trip: <b style="color:var(--brand-d)">${tm?tm.toFixed(1)+" km/l":"—"}</b> · lifetime: <b style="color:var(--brand-d)">${ec?ec.toFixed(1)+" km/l":"—"}</b></div>
-    ${(v.chassis||v.engine||(v.lat&&v.lng))?`<div class="tablewrap" style="margin-top:8px"><table><tr><th>Chassis</th><th>Engine</th><th>Last location</th></tr><tr><td>${esc(v.chassis||"—")}</td><td>${esc(v.engine||"—")}</td><td>${(v.lat&&v.lng)?`<a href="https://maps.google.com/?q=${v.lat},${v.lng}" target="_blank">📍 Map</a>`:"—"}</td></tr></table></div>`:""}
-    <div class="sec">MAINTENANCE</div>
-    ${["Service","Repair"].map(cat=>{ const rows=(v.maintItems||[]).filter(mi=>maintCatOf(mi.name)===cat); if(!rows.length) return ""; return `<div style="font-size:11px;color:var(--brand-d);font-weight:800;margin:8px 0 4px;letter-spacing:.3px">${cat==="Service"?"🔧 SERVICE":"🛠️ REPAIR"}</div><div class="tablewrap"><table><tr><th>Item</th><th>Interval</th><th>Last @</th><th>Status</th></tr>${rows.map(mi=>`<tr><td><b>${esc(normMaintName(mi.name))}</b></td><td>${mi.intervalKm||"—"} km</td><td>${mi.lastKm||"—"}</td><td>${dueTxt(mi)}</td></tr>`).join("")}</table></div>`; }).join("")||`<div class="tablewrap"><table><tr><td style="color:var(--soft);padding:10px">No items.</td></tr></table></div>`}
-    <div class="sec">DOCUMENTS</div>
-    <div class="tablewrap"><table><tr><th>Insurance</th><th>PUC</th>${typeNeedsFitness(v.type)?`<th>Fitness</th>`:``}<th>Next service</th></tr><tr><td>${docTxt(v.insuranceExpiry)}</td><td>${docTxt(v.pucExpiry)}</td>${typeNeedsFitness(v.type)?`<td>${docTxt(v.fitnessExpiry)}</td>`:``}<td>${nextSvc?docTxt(nextSvc):'<span style="color:var(--soft)">not set</span>'}</td></tr></table></div>
-    <div class="filters" style="margin-top:12px"><button class="btn y" id="vFuel">⛽ Add fuel</button><button class="btn" id="vSvc">🔧 Add service</button><span style="font-size:11px;color:var(--soft);align-self:center;margin-left:auto">Edit vehicle details from <b>Manage vehicles</b></span></div>
-    ${(v.fuelLogs||[]).length?`<div class="sec">FUEL HISTORY</div><div class="tablewrap"><table><tr><th>Date</th><th>Project</th><th>Odometer</th><th>Litres</th><th>₹</th><th></th></tr>${(v.fuelLogs||[]).slice().sort((a,b)=>(b.date||0)-(a.date||0)).map(f=>`<tr><td>${fmtDate(f.date)}</td><td>${esc(f.project||"—")}</td><td>${f.odometer} km</td><td>${(f.litres||0).toFixed(2)}</td><td>${money(f.amount||0)}</td><td style="white-space:nowrap"><span class="logEdit" data-id="${esc(f.id||"")}" title="Edit entry" style="color:var(--brand-d);cursor:pointer;font-weight:700;margin-right:10px">✏️</span><span class="logDel" data-kind="fuel" data-id="${esc(f.id||"")}" title="Delete entry" style="color:var(--danger);cursor:pointer;font-weight:700">✕</span></td></tr>`).join("")}</table></div>`:""}
-    ${(v.serviceLogs||[]).length?`<div class="sec">SERVICE HISTORY</div><div class="tablewrap"><table><tr><th>Date</th><th>Type</th><th>Project</th><th>Odometer</th><th>₹ Total</th><th>Parts</th><th>Labour</th><th>Garage</th><th>Next due</th><th>Bill</th><th></th></tr>${(v.serviceLogs||[]).slice().sort((a,b)=>(b.date||0)-(a.date||0)).map(s=>`<tr><td>${fmtDate(s.date)}</td><td>${esc(s.type||"")}</td><td>${esc(s.project||"—")}</td><td>${s.odometer} km</td><td>${money(s.amount||0)}</td><td>${money(Math.max(0,(s.amount||0)-(s.labour||0)))}</td><td>${s.labour?money(s.labour):"—"}</td><td>${esc(s.garage||"—")}${s.garagePhone?` <a href="tel:${esc(s.garagePhone)}" style="color:var(--brand-d);text-decoration:none">📞</a>`:""}</td><td>${s.nextDue?fmtDate(s.nextDue):"—"}</td><td>${s.billPhoto?`<span class="svBill" data-p="${esc(s.billPhoto)}" title="View bill" style="cursor:pointer;color:var(--brand-d)">${/\.pdf$/i.test(s.billPhoto)?"📄":"📷"}</span>`:"—"}</td><td style="white-space:nowrap"><span class="logEditSvc" data-id="${esc(s.id||"")}" title="Edit entry" style="color:var(--brand-d);cursor:pointer;font-weight:700;margin-right:10px">✏️</span><span class="logDel" data-kind="service" data-id="${esc(s.id||"")}" title="Delete entry" style="color:var(--danger);cursor:pointer;font-weight:700">✕</span></td></tr>`).join("")}</table></div>`:""}
-    <div style="text-align:right;margin-top:12px"><button class="btn" id="vClose">Close</button></div></div>`;
+    <div class="filters" style="margin-top:12px;gap:4px;background:var(--bg);border-radius:50px;padding:3px;display:inline-flex">${tab("overview","Overview")}${tab("fuel","⛽ Fuel log"+(fuelN?` · ${fuelN}`:""))}${tab("service","🔧 Service log"+(svcN?` · ${svcN}`:""))}${tab("maint","🛠 Maintenance")}</div>
+    <div style="margin-top:14px">${body}</div>
+    <div style="text-align:right;margin-top:14px"><button class="btn" id="vClose">Close</button></div></div>`;
   m.onclick=ev=>{ if(ev.target===m) m.classList.add("hidden"); };
   $("#vClose").onclick=()=>m.classList.add("hidden");
-  $("#vFuel").onclick=()=>fuelForm(v);
-  $("#vSvc").onclick=()=>serviceForm(v);
-  // Per-log delete — remove one fuel/service entry by id (to fix a wrong entry; re-add via the forms).
+  document.querySelectorAll("#modal .vTab").forEach(b=>b.onclick=()=>{ _vTab=b.dataset.t; openVehicle(v); });
+  { const fb=$("#vFuel"); if(fb) fb.onclick=()=>fuelForm(v); }
+  { const sb=$("#vSvc"); if(sb) sb.onclick=()=>serviceForm(v); }
+  // Per-log delete — fuel / service entry by id.
   m.querySelectorAll(".logDel").forEach(b=>b.onclick=async()=>{
     const kind=b.dataset.kind, id=b.dataset.id; if(!id) return;
     if(!confirm(`Delete this ${kind} entry?`)) return;
@@ -1360,12 +1379,17 @@ function openVehicle(v){
     try{ await setDoc(doc(db,"fleet",v.id),{[field]:updated,updatedAt:Date.now()},{merge:true}); logAudit("vehicle",`Deleted a ${kind} entry for ${v.name||v.number}`); v[field]=updated; openVehicle(v); renderFleet(); }
     catch(e){ alert(e.message||e); }
   });
-  // Edit a fuel entry — re-open the fuel form pre-filled with this log.
   m.querySelectorAll(".logEdit").forEach(b=>b.onclick=()=>{ const f=(v.fuelLogs||[]).find(x=>x.id===b.dataset.id); if(f) fuelForm(v,f); });
   m.querySelectorAll(".logEditSvc").forEach(b=>b.onclick=()=>{ const s=(v.serviceLogs||[]).find(x=>x.id===b.dataset.id); if(s) serviceForm(v,s); });
-  // View a service bill photo (Storage) in a new tab.
   m.querySelectorAll(".svBill").forEach(b=>b.onclick=async()=>{ try{ const u=await getDownloadURL(ref(storage,b.dataset.p)); window.open(u,"_blank"); }catch(e){ alert("Couldn't open bill: "+(e.message||e)); } });
+  // Maintenance tab wiring
+  if(_vTab==="maint"){
+    m.querySelectorAll(".mIRm").forEach(b=>b.onclick=()=>{ const i=+b.dataset.i; if(!confirm(`Remove "${items[i].name}" from this vehicle's maintenance list?`)) return; items.splice(i,1); v.maintItems=items; saveMaintItems(v,items); });
+    $("#mAddItem").onclick=()=>{ const nm=($("#mNewName").value||"").trim(); const ikm=parseInt($("#mNewKm").value)||0; const cat=$("#mNewCat").value; if(!nm){ alert("Enter item name"); return; } if(!ikm){ alert("Enter interval km"); return; } items.push({name:nm,intervalKm:ikm,lastKm:0}); MAINT_CAT[nm.toLowerCase()]=cat; v.maintItems=items; saveMaintItems(v,items); };
+    $("#mSave").onclick=()=>{ document.querySelectorAll("#modal .mIv").forEach(inp=>{ const i=+inp.dataset.i; if(items[i]) items[i].intervalKm=parseInt(inp.value)||0; }); v.maintItems=items; saveMaintItems(v,items); };
+  }
 }
+async function saveMaintItems(v,items){ try{ await setDoc(doc(db,"fleet",v.id),{maintItems:items,updatedAt:Date.now()},{merge:true}); logAudit("vehicle",`Updated maintenance intervals for ${v.name||v.number}`); openVehicle(v); renderFleet(); }catch(e){ alert("Save failed: "+(e.message||e)); } }
 // Full-page Add/Edit vehicle form (styled like Project Setup) — replaces the Fleet tab, not a modal.
 function vehicleForm(existing){
   const base=existing||{};
@@ -1398,11 +1422,10 @@ function vehicleForm(existing){
         <div><div class="suLbl">Type</div><select id="fType" class="suInp">${FLEET_TYPES.map(t=>`<option ${t===(base.type||"Bike")?"selected":""}>${t}</option>`).join("")}</select></div>
         <div><div class="suLbl">Current odometer (km)</div><input type="number" id="fKm" class="suInp" value="${base.currentKm||""}"></div>
       </div>
-      <div class="suLbl" style="margin-top:18px">Service &amp; repair intervals (km) — model-wise</div>
-      ${["Service","Repair"].map(cat=>{ const g=items.map((mi,i)=>({mi,i})).filter(o=>maintCatOf(o.mi.name)===cat); if(!g.length) return ""; return `<div style="font-size:11px;color:var(--brand-d);font-weight:800;margin:10px 0 4px;letter-spacing:.3px">${cat==="Service"?"🔧 SERVICE":"🛠️ REPAIR"}</div><div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(160px,1fr))">${g.map(({mi,i})=>`<div><div style="font-size:11px;color:var(--soft);margin-bottom:3px">${esc(normMaintName(mi.name))} every</div><input type="number" class="fIv suInp" data-i="${i}" value="${mi.intervalKm||""}"></div>`).join("")}</div>`; }).join("")}
-      <div style="margin-top:16px;display:flex;align-items:center;gap:14px;flex-wrap:wrap;border-top:1px solid var(--line);padding-top:14px">
+      <div style="margin-top:18px;display:flex;align-items:center;gap:14px;flex-wrap:wrap">
         <label style="display:inline-flex;align-items:center;gap:7px;font-size:13.5px;cursor:pointer"><input type="checkbox" id="fDef" ${_defMI?"checked":""}> Uses DEF (AdBlue)</label>
         <div id="fDefWrap" style="align-items:center;gap:8px;${_defMI?"display:flex":"display:none"}"><span style="font-size:11px;color:var(--soft)">DEF refill every (km)</span><input type="number" id="fDefKm" class="suInp" style="width:140px" value="${_defMI?(_defMI.intervalKm||""):8000}"></div>
+        <span style="margin-left:auto;font-size:11.5px;color:var(--soft)">Service &amp; repair intervals are edited from the vehicle card → <b>🛠 Maintenance</b> tab.</span>
       </div>
       <div class="suLbl" style="margin-top:18px">Documents</div>
       <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px">
@@ -1422,9 +1445,11 @@ function vehicleForm(existing){
     const ok=/^[A-Z]{2}[0-9]{1,2}[A-Z]{0,3}[0-9]{1,4}$/.test(number)||/^[0-9]{2}BH[0-9]{4}[A-Z]{1,2}$/.test(number);
     if(!ok && !confirm(`"${number}" doesn't look like a standard RTO number (e.g. MH12AB1234 or 22BH1234AB). Save anyway?`)) return;
     const dms=id=>{ const x=$("#"+id).value; return x?new Date(x+"T00:00:00").getTime():0; };
-    const newItems=items.map(mi=>({name:mi.name,intervalKm:mi.intervalKm||0,lastKm:mi.lastKm||0}));
-    document.querySelectorAll(".fIv").forEach(inp=>{ const i=+inp.dataset.i; if(newItems[i]) newItems[i].intervalKm=parseInt(inp.value)||0; });
-    if($("#fDef").checked) newItems.push({name:"DEF",intervalKm:parseInt($("#fDefKm").value)||8000,lastKm:_defMI?(_defMI.lastKm||0):0});
+    const newItems=items.map(mi=>({name:normMaintName(mi.name),intervalKm:mi.intervalKm||0,lastKm:mi.lastKm||0}));
+    const hasDef=newItems.some(mi=>(mi.name||"").toLowerCase()==="def");
+    if($("#fDef").checked && !hasDef) newItems.push({name:"DEF",intervalKm:parseInt($("#fDefKm").value)||8000,lastKm:_defMI?(_defMI.lastKm||0):0});
+    else if($("#fDef").checked && hasDef) newItems.forEach(mi=>{ if((mi.name||"").toLowerCase()==="def") mi.intervalKm=parseInt($("#fDefKm").value)||mi.intervalKm||8000; });
+    else if(!$("#fDef").checked && hasDef) newItems.splice(newItems.findIndex(mi=>(mi.name||"").toLowerCase()==="def"),1);
     const id=existing?existing.id:fleetRid();
     const payload={ number, name, make:$("#fMake").value.trim(), model:$("#fModel").value.trim(), year:$("#fYear").value||"",
       chassis:$("#fChassis").value.trim().toUpperCase(), engine:$("#fEngine").value.trim().toUpperCase(),

@@ -1185,8 +1185,9 @@ async function renderFleet(){
   if(_fleetView==="maint") return renderFleetMaintenance(V);
   const bikes=V.filter(v=>v.type==="Bike").length, fourw=V.length-bikes;
   // Mileage is per-vehicle (mixing bikes + trucks gives a meaningless average) — surface the BEST performer instead.
-  // Require ≥3 fuel logs per vehicle so noisy 2-fill records can't claim "best" — keep all data, just don't highlight low-confidence ones.
-  const ecArr=V.map(v=>({v,ec:vehEconomy(v),fills:(v.fuelLogs||[]).length})).filter(o=>o.ec>0&&o.fills>=3).sort((a,b)=>b.ec-a.ec);
+  // Require ≥3 FULL fills per vehicle (partials don't count as checkpoints) so noisy low-data records can't claim "best".
+  const fullFills=v=>(v.fuelLogs||[]).filter(f=>f.fullTank!==false).length;
+  const ecArr=V.map(v=>({v,ec:vehEconomy(v),fulls:fullFills(v)})).filter(o=>o.ec>0&&o.fulls>=3).sort((a,b)=>b.ec-a.ec);
   const bestEc=ecArr[0];
   // This-month aggregates (km + fuel ₹ + service ₹ + ₹/km on total) — fleet-wide totals are legitimate (sum/sum, not average-of-averages)
   const mAgg=V.reduce((a,v)=>{ const m=vehMonth(v); a.km+=m.km; a.fuel+=m.fuel; a.svc+=m.svc; a.lit+=m.litres; a.fills+=m.fills; return a; },{km:0,fuel:0,svc:0,lit:0,fills:0});
@@ -1219,7 +1220,7 @@ async function renderFleet(){
       ${kpi("KM · THIS MONTH",mAgg.km.toLocaleString("en-IN"),"📏",mAgg.km?`across ${V.length} vehicle${V.length===1?"":"s"}`:"no km logged")}
       ${kpi("RUNNING ₹ · THIS MONTH",money(mAgg.fuel+mAgg.svc),"💸",`fuel ${money(mAgg.fuel)} · service ${money(mAgg.svc)}`)}
       ${kpi("₹ / KM · AVG",avgCpk?"₹"+avgCpk.toFixed(2):"—","📉",avgCpk?"fuel + service this month":"need km + fuel")}
-      ${kpi("BEST MILEAGE",bestEc?bestEc.ec.toFixed(1):"—","🏆",bestEc?esc(bestEc.v.number||bestEc.v.name)+" · km/l · "+bestEc.fills+" fills":"need ≥3 fills per vehicle")}
+      ${kpi("BEST MILEAGE",bestEc?bestEc.ec.toFixed(1):"—","🏆",bestEc?esc(bestEc.v.number||bestEc.v.name)+" · km/l · "+bestEc.fulls+" full fills":"need ≥3 full fills per vehicle")}
       ${kpi("ALERTS",allAlerts.length,"⚠",allAlerts.length?`${expired} expired/overdue · ${due} due`:"all up to date",allAlerts.length>0)}
     </div>
     <div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(300px,1fr));margin-top:14px">

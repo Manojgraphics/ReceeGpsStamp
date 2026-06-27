@@ -244,17 +244,20 @@ class FirestoreSync @Inject constructor(
             val snap = backupCollection(uid).get().await()
             if (snap.isEmpty) return@withContext Result(false, "No cloud backup found")
             fun jsonOf(name: String): String? = snap.documents.firstOrNull { it.id == name }?.getString("json")
+            // Safety guard: a corrupt/empty cloud doc parses to emptyList — it must NEVER blank a
+            // populated local collection. RestoreGuard.keep ⇒ empty incoming + non-empty local keeps local.
+            val cur = localStore.db.value
             val db = LocalStore.Db(
-                companies = parse(jsonOf("companies"), object : TypeToken<List<Company>>() {}.type),
-                distributors = parse(jsonOf("distributors"), object : TypeToken<List<Distributor>>() {}.type),
-                shops = parse(jsonOf("shops"), object : TypeToken<List<Shop>>() {}.type),
-                recces = parse(jsonOf("recces"), object : TypeToken<List<RecceEntry>>() {}.type),
-                drafts = parse(jsonOf("drafts"), object : TypeToken<List<RecceDraft>>() {}.type),
-                expenses = parse(jsonOf("expenses"), object : TypeToken<List<Expense>>() {}.type),
-                installs = parse(jsonOf("installs"), object : TypeToken<List<InstallEntry>>() {}.type),
-                vehicles = parse(jsonOf("vehicles"), object : TypeToken<List<Vehicle>>() {}.type),
-                fuelLogs = parse(jsonOf("fuelLogs"), object : TypeToken<List<FuelLog>>() {}.type),
-                serviceLogs = parse(jsonOf("serviceLogs"), object : TypeToken<List<ServiceLog>>() {}.type),
+                companies = RestoreGuard.keep(parse(jsonOf("companies"), object : TypeToken<List<Company>>() {}.type), cur.companies),
+                distributors = RestoreGuard.keep(parse(jsonOf("distributors"), object : TypeToken<List<Distributor>>() {}.type), cur.distributors),
+                shops = RestoreGuard.keep(parse(jsonOf("shops"), object : TypeToken<List<Shop>>() {}.type), cur.shops),
+                recces = RestoreGuard.keep(parse(jsonOf("recces"), object : TypeToken<List<RecceEntry>>() {}.type), cur.recces),
+                drafts = RestoreGuard.keep(parse(jsonOf("drafts"), object : TypeToken<List<RecceDraft>>() {}.type), cur.drafts),
+                expenses = RestoreGuard.keep(parse(jsonOf("expenses"), object : TypeToken<List<Expense>>() {}.type), cur.expenses),
+                installs = RestoreGuard.keep(parse(jsonOf("installs"), object : TypeToken<List<InstallEntry>>() {}.type), cur.installs),
+                vehicles = RestoreGuard.keep(parse(jsonOf("vehicles"), object : TypeToken<List<Vehicle>>() {}.type), cur.vehicles),
+                fuelLogs = RestoreGuard.keep(parse(jsonOf("fuelLogs"), object : TypeToken<List<FuelLog>>() {}.type), cur.fuelLogs),
+                serviceLogs = RestoreGuard.keep(parse(jsonOf("serviceLogs"), object : TypeToken<List<ServiceLog>>() {}.type), cur.serviceLogs),
             )
             // Profile (name/mobile/email/city/state/gender) rides along in its own doc.
             jsonOf("profile")?.let { pj ->

@@ -10,7 +10,6 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.shrinkVertically
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -49,7 +48,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -827,20 +825,25 @@ private fun PendingShopChip(name: String, city: String, selected: Boolean, onCli
 
 @Composable
 private fun CapturedThumb(path: String, onDelete: (() -> Unit)? = null, onEdit: ((String) -> Unit)? = null) {
-    // Key on lastModified too so the thumb reloads after the photo is edited (overwritten in place).
-    val bitmap = remember(path, java.io.File(path).lastModified()) { android.graphics.BitmapFactory.decodeFile(path) }
+    // Coil down-samples to the 64dp target (no full-res decode → no OOM). Cache key varies by
+    // lastModified so the thumb reloads after an in-place annotate/edit overwrites the same file.
+    val ctx = androidx.compose.ui.platform.LocalContext.current
+    val lastMod = java.io.File(path).lastModified()
     Box(
         Modifier.size(64.dp).clip(RoundedCornerShape(8.dp))
             .then(if (onEdit != null) Modifier.clickable { onEdit(path) } else Modifier),
     ) {
-        if (bitmap != null) {
-            Image(
-                bitmap = bitmap.asImageBitmap(),
-                contentDescription = "Captured",
-                contentScale = ContentScale.Crop,
-                modifier = Modifier.fillMaxSize(),
-            )
-        }
+        coil.compose.AsyncImage(
+            model = coil.request.ImageRequest.Builder(ctx)
+                .data(java.io.File(path))
+                .memoryCacheKey("$path:$lastMod")
+                .diskCacheKey("$path:$lastMod")
+                .crossfade(false)
+                .build(),
+            contentDescription = "Captured",
+            contentScale = ContentScale.Crop,
+            modifier = Modifier.fillMaxSize(),
+        )
         // Floating edit (pencil) badge — tap the photo to annotate it.
         if (onEdit != null) {
             Box(

@@ -998,7 +998,7 @@ function renderMap(){
 }
 
 // ── Fleet (fuel + distance + route trail, from real recce GPS + expenses) ──
-let _fleetMap=null, _fleetView="vehicles";
+let _fleetMap=null, _fleetView="vehicles", _svcFilter="";
 const haversine=(a,b)=>{ const R=6371,r=x=>x*Math.PI/180; const dLat=r(b.lat-a.lat),dLng=r(b.lng-a.lng); const s=Math.sin(dLat/2)**2+Math.cos(r(a.lat))*Math.cos(r(b.lat))*Math.sin(dLng/2)**2; return 2*R*Math.asin(Math.sqrt(s)); };
 function surveyorDistance(uid){
   const pts=fRecces().filter(x=>x.uid===uid&&x.lat&&x.lng).sort((a,b)=>a.date-b.date);
@@ -1009,6 +1009,7 @@ function surveyorDistance(uid){
 async function renderFleet(){
   try{ const fl=await getDocs(collection(db,"fleet")); FLEET=fl.docs.map(d=>({id:d.id,...d.data()})); }catch(e){}
   const V=FLEET.slice().sort((a,b)=>(a.name||a.number||"").localeCompare(b.name||b.number||""));
+  if(_fleetView==="services") return renderFleetServices(V);
   const bikes=V.filter(v=>v.type==="Bike").length, fourw=V.length-bikes;
   const ecs=V.map(v=>vehEconomy(v)).filter(x=>x>0), avgEc=ecs.length?Math.round(ecs.reduce((a,b)=>a+b,0)/ecs.length):0;
   const now=new Date(), mStart=new Date(now.getFullYear(),now.getMonth(),1).getTime();
@@ -1024,6 +1025,7 @@ async function renderFleet(){
   $("#fleet").innerHTML=`
     <div style="display:flex;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:14px">
       <div style="flex:1;min-width:150px;font-size:18px;font-weight:800">Fleet · ${V.length} vehicle${V.length===1?"":"s"}</div>
+      <div class="filters" style="gap:4px;background:var(--bg);border-radius:50px;padding:3px"><button class="btn fvTab" data-v="vehicles" style="background:var(--brand);color:var(--brand-text);border-radius:50px;padding:6px 14px;font-size:13px;font-weight:700;border:none">🚗 Vehicles</button><button class="btn fvTab" data-v="services" style="background:transparent;color:var(--soft);border-radius:50px;padding:6px 14px;font-size:13px;font-weight:700;border:none">🔧 Service history</button></div>
       <button class="btn" id="flLog">↓ Fuel log</button>
       <button class="btn y" id="vManage">🚗 Manage vehicles</button>
     </div>
@@ -1055,11 +1057,55 @@ async function renderFleet(){
         ${(()=>{ const fe=V.map(v=>({v,ec:vehEconomy(v)})).filter(o=>o.ec>0).sort((a,b)=>b.ec-a.ec), mx=Math.max(1,...fe.map(o=>o.ec)); return fe.length?fe.map(o=>`<div style="margin-bottom:11px"><div style="display:flex;font-size:12.5px;font-weight:700"><span style="flex:1">${esc(o.v.number||o.v.name)}${o.v.model?` · <span style="color:var(--soft);font-weight:400">${esc(o.v.model)}</span>`:""}</span><span style="color:var(--brand-d)">${o.ec.toFixed(0)}</span></div><div class="bar" style="margin-top:5px"><i style="width:${Math.round(o.ec*100/mx)}%"></i></div></div>`).join(""):`<div style="color:var(--soft);font-size:13px">No fuel logs yet.</div>`; })()}
       </div>
     </div>`;
+  document.querySelectorAll("#fleet .fvTab").forEach(b=>b.onclick=()=>{ _fleetView=b.dataset.v; renderFleet(); });
   $("#vManage").onclick=manageVehicles;
   $("#flLog").onclick=()=>{ const H=["Vehicle","Date","Litres","Amount","Rate","Odometer"], rows=[]; V.forEach(v=>(v.fuelLogs||[]).slice().sort((a,b)=>(b.date||0)-(a.date||0)).forEach(f=>rows.push([v.number||v.name||"",fmtDate(f.date),f.litres?Number(f.litres).toFixed(2):"",f.amount||"",f.ratePerLitre||(f.litres?((f.amount||0)/f.litres).toFixed(2):""),f.odometer||""]))); xlsx("fuel_logs",H,rows); };
   document.querySelectorAll("#fleet .vehCard").forEach(c=>c.onclick=()=>{ const v=V.find(x=>x.id===c.dataset.id); if(v) openVehicle(v); });
   document.querySelectorAll("#fleet .vQFuel").forEach(b=>b.onclick=e=>{ e.stopPropagation(); const v=V.find(x=>x.id===b.dataset.id); if(v) fuelForm(v); });
   document.querySelectorAll("#fleet .vQSvc").forEach(b=>b.onclick=e=>{ e.stopPropagation(); const v=V.find(x=>x.id===b.dataset.id); if(v) serviceForm(v); });
+}
+// Service history — flat list of every service log across all vehicles (separate Fleet tab).
+function renderFleetServices(V){
+  const all=[]; V.forEach(v=>(v.serviceLogs||[]).forEach(s=>all.push({v,s})));
+  all.sort((a,b)=>(b.s.date||0)-(a.s.date||0));
+  const filtered=_svcFilter?all.filter(o=>o.v.id===_svcFilter):all;
+  const total=filtered.reduce((a,o)=>a+(o.s.amount||0),0);
+  const totalLab=filtered.reduce((a,o)=>a+(o.s.labour||0),0);
+  $("#fleet").innerHTML=`
+    <div style="display:flex;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:14px">
+      <div style="flex:1;min-width:150px;font-size:18px;font-weight:800">Fleet · ${V.length} vehicle${V.length===1?"":"s"}</div>
+      <div class="filters" style="gap:4px;background:var(--bg);border-radius:50px;padding:3px"><button class="btn fvTab" data-v="vehicles" style="background:transparent;color:var(--soft);border-radius:50px;padding:6px 14px;font-size:13px;font-weight:700;border:none">🚗 Vehicles</button><button class="btn fvTab" data-v="services" style="background:var(--brand);color:var(--brand-text);border-radius:50px;padding:6px 14px;font-size:13px;font-weight:700;border:none">🔧 Service history</button></div>
+      <button class="btn" id="svXls">↓ Export Excel</button>
+    </div>
+    <div class="card" style="padding:14px;margin-bottom:14px">
+      <div style="display:flex;align-items:center;flex-wrap:wrap;gap:12px">
+        <div><b style="font-size:14.5px">${filtered.length} service${filtered.length===1?"":"s"}</b> <span style="color:var(--soft);font-size:12.5px">· total ${money(total)}${totalLab?` · labour ${money(totalLab)}`:""}</span></div>
+        <select id="svFlt" style="margin-left:auto;min-width:200px"><option value="">All vehicles</option>${V.map(v=>`<option value="${esc(v.id)}" ${_svcFilter===v.id?"selected":""}>${esc(v.number||v.name||"Vehicle")}${v.model?" · "+esc(v.model):""}</option>`).join("")}</select>
+      </div>
+    </div>
+    ${filtered.length?`<div class="tablewrap"><table>
+      <tr><th>Date</th><th>Vehicle</th><th>Items</th><th>Odo</th><th>Total ₹</th><th>Labour</th><th>Garage</th><th>Next due</th><th>Bill</th><th></th></tr>
+      ${filtered.map(o=>{ const s=o.s, v=o.v;
+        return `<tr><td style="white-space:nowrap">${fmtDate(s.date)}</td>
+          <td class="wrap"><b>${esc(v.number||v.name||"Vehicle")}</b>${v.model?`<br><span style="color:var(--soft);font-size:11px">${esc(v.model)}</span>`:""}</td>
+          <td class="wrap">${esc(s.type||"—")}${s.project?`<br><span style="color:var(--soft);font-size:11px">📁 ${esc(s.project)}</span>`:""}${s.note?`<br><span style="color:var(--soft);font-size:11px">${esc(s.note)}</span>`:""}</td>
+          <td>${(s.odometer||0).toLocaleString("en-IN")}</td>
+          <td style="font-weight:700">${money(s.amount||0)}</td>
+          <td>${s.labour?money(s.labour):"—"}</td>
+          <td class="wrap">${esc(s.garage||"—")}${s.garagePhone?` <a href="tel:${esc(s.garagePhone)}" style="color:var(--brand-d);text-decoration:none">📞</a>`:""}</td>
+          <td style="white-space:nowrap">${s.nextDue?fmtDate(s.nextDue):"—"}</td>
+          <td>${s.billPhoto?`<span class="svBill2" data-p="${esc(s.billPhoto)}" title="View bill" style="cursor:pointer;color:var(--brand-d)">${/\.pdf$/i.test(s.billPhoto)?"📄":"📷"}</span>`:"—"}</td>
+          <td style="white-space:nowrap"><span class="svEd" data-vid="${esc(v.id)}" data-id="${esc(s.id||"")}" title="Edit entry" style="color:var(--brand-d);cursor:pointer;font-weight:700;margin-right:10px">✏️</span><span class="svDel" data-vid="${esc(v.id)}" data-id="${esc(s.id||"")}" title="Delete entry" style="color:var(--danger);cursor:pointer;font-weight:700">✕</span></td>
+        </tr>`; }).join("")}
+    </table></div>`:`<div class="card loading">No service logs yet.</div>`}`;
+  document.querySelectorAll("#fleet .fvTab").forEach(b=>b.onclick=()=>{ _fleetView=b.dataset.v; renderFleet(); });
+  $("#svFlt").onchange=()=>{ _svcFilter=$("#svFlt").value; renderFleet(); };
+  $("#svXls").onclick=()=>{ const H=["Date","Vehicle","Items","Odometer","Total ₹","Labour","Parts","Garage","Phone","Next due","Project","Note"];
+    const rows=filtered.map(o=>[fmtDate(o.s.date),o.v.number||o.v.name||"",o.s.type||"",o.s.odometer||"",o.s.amount||0,o.s.labour||0,Math.max(0,(o.s.amount||0)-(o.s.labour||0)),o.s.garage||"",o.s.garagePhone||"",o.s.nextDue?fmtDate(o.s.nextDue):"",o.s.project||"",o.s.note||""]);
+    xlsx("service_history",H,rows); };
+  document.querySelectorAll("#fleet .svBill2").forEach(b=>b.onclick=async()=>{ try{ const u=await getDownloadURL(ref(storage,b.dataset.p)); window.open(u,"_blank"); }catch(e){ alert("Couldn't open bill: "+(e.message||e)); } });
+  document.querySelectorAll("#fleet .svEd").forEach(b=>b.onclick=()=>{ const v=V.find(x=>x.id===b.dataset.vid); if(!v)return; const s=(v.serviceLogs||[]).find(x=>x.id===b.dataset.id); if(s) serviceForm(v,s); });
+  document.querySelectorAll("#fleet .svDel").forEach(b=>b.onclick=async()=>{ const v=V.find(x=>x.id===b.dataset.vid); if(!v)return; if(!confirm("Delete this service entry?"))return; const updated=(v.serviceLogs||[]).filter(x=>x.id!==b.dataset.id); try{ await setDoc(doc(db,"fleet",v.id),{serviceLogs:updated,updatedAt:Date.now()},{merge:true}); logAudit("vehicle",`Deleted a service entry for ${v.name||v.number}`); v.serviceLogs=updated; renderFleet(); }catch(e){ alert(e.message||e); } });
 }
 // Manage vehicles — the single place to add / edit / remove vehicles & their details (card = logging only).
 function manageVehicles(){
@@ -1255,7 +1301,7 @@ function serviceForm(v, edit){
     const log={id:logId,date,odometer:odo,type,amount:parseFloat($("#svAmt").value)||0,labour:parseFloat($("#svLab").value)||0,garage:$("#svGarage").value.trim(),garagePhone:$("#svGaragePhone").value.replace(/\D/g,"").slice(0,10),project:$("#svProj").value,nextDue,billPhoto,note:$("#svNote").value.trim()};
     const pickedSet=new Set(picked.map(p=>p.toLowerCase())); const items=(v.maintItems||[]).map(mi=>(pickedSet.has((mi.name||"").toLowerCase())||(pickedSet.has("service")&&mi.name==="Oil change"))?{...mi,lastKm:odo}:mi);
     const logs=edit?(v.serviceLogs||[]).map(x=>x.id===edit.id?log:x):[...(v.serviceLogs||[]),log];
-    try{ await setDoc(doc(db,"fleet",v.id),{serviceLogs:logs,maintItems:items,currentKm:Math.max(odo,v.currentKm||0),updatedAt:Date.now()},{merge:true}); logAudit("vehicle",`${edit?"Edited "+type:type} for ${v.name||v.number}`); v.serviceLogs=logs; v.maintItems=items; v.currentKm=Math.max(odo,v.currentKm||0); openVehicle(v); renderFleet(); }catch(e){ alert(e.message||e); } };
+    try{ await setDoc(doc(db,"fleet",v.id),{serviceLogs:logs,maintItems:items,currentKm:Math.max(odo,v.currentKm||0),updatedAt:Date.now()},{merge:true}); logAudit("vehicle",`${edit?"Edited "+type:type} for ${v.name||v.number}`); v.serviceLogs=logs; v.maintItems=items; v.currentKm=Math.max(odo,v.currentKm||0); m.classList.add("hidden"); if(_fleetView==="services") renderFleet(); else { openVehicle(v); renderFleet(); } }catch(e){ alert(e.message||e); } };
 }
 function drawTrail(uid){
   if(!_fleetMap) return;

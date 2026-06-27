@@ -358,7 +358,7 @@ function build(sv,meta={}){
         media:(r.media||[]).map((m,idx)=>({idx,type:m.type||"",creative:m.creative||"",width:m.width||0,height:m.height||0,unit:m.unit||"",qty:m.qty||1,photos:m.photos||[]})),
         photos:[...(r.shopPhotos||[]),...((r.media||[]).flatMap(m=>m.photos||[]))]}; recces.push(rec); return rec; });
     const myE=(s.expenses||[]).map(e=>{ const x={uid,surveyor:sName,...e}; expenses.push(x); return x; });
-    (s.installs||[]).forEach(it=>{ if(it&&it.recceId){ appInstall[it.recceId+"#"+(it.mediaIndex||0)]={afterPhotos:it.afterPhotos||[],beforePhotos:it.beforePhotos||[],frontPhotos:it.frontPhotos||[],status:it.status||"",reason:it.reason||"",lat:it.lat||0,lng:it.lng||0,uid};
+    (s.installs||[]).forEach(it=>{ if(it&&it.recceId){ appInstall[it.recceId+"#"+(it.mediaIndex||0)]={afterPhotos:it.afterPhotos||[],beforePhotos:it.beforePhotos||[],frontPhotos:it.frontPhotos||[],status:it.status||"",reason:it.reason||"",lat:it.lat||0,lng:it.lng||0,at:it.installedAt||it.updatedAt||it.at||0,uid};
       if(it.lat&&it.lng) installPoints.push({lat:it.lat,lng:it.lng,shop:it.shopName||"",city:it.city||"",status:it.status||"",reason:it.reason||"",surveyor:sName,project:it.project||"",media:it.mediaType||"",size:it.size||""}); } });
     surveyors.push({uid,name:sName,mobile:(s.profile&&s.profile.mobile)||"",lastActive:meta[uid]||0,projects:(s.distributors||[]).length,stores:(s.shops||[]).length,
       surveyed:myR.length,interested:myR.filter(r=>r.status==="Interested").length,
@@ -719,63 +719,59 @@ async function openBills(e){
   const urls=await Promise.all(photos.map(p=>photoURL(e.uid,p)));
   $("#bpg").innerHTML=urls.filter(Boolean).map(u=>`<a href="${u}" target="_blank"><img src="${u}" loading="lazy"></a>`).join("")||`<div class="loading">No bill photos available.</div>`;
 }
+let _expDist="", _expTab="all";
 function renderExpenses(){
   const e=fExpenses();
-  const advance=sum(e.filter(x=>x.kind==="ADVANCE")), spentYou=sum(e.filter(x=>x.kind==="EXPENSE"&&x.paymentMode!=="Company")),
-    company=sum(e.filter(x=>x.kind==="EXPENSE"&&x.paymentMode==="Company")), bal=advance-spentYou;
-  const cats={}; e.filter(x=>x.kind==="EXPENSE").forEach(x=>cats[x.category||"Other"]=(cats[x.category||"Other"]||0)+(x.amount||0));
-  const bySur={}; e.forEach(x=>{ const s=bySur[x.uid]=bySur[x.uid]||{uid:x.uid,name:x.surveyor,adv:0,sp:0}; if(x.kind==="ADVANCE")s.adv+=x.amount||0; else if(x.paymentMode!=="Company")s.sp+=x.amount||0; });
-  const byProj={}; e.filter(x=>x.kind==="EXPENSE").forEach(x=>{ const p=x.projectName||"General"; const o=byProj[p]=byProj[p]||{sp:0,comp:0}; if(x.paymentMode==="Company")o.comp+=x.amount||0; else o.sp+=x.amount||0; });
-  const appExp=e.filter(x=>x.kind==="EXPENSE"&&x.paymentMode!=="Company");
-  let appr=0,pend=0,rej=0; appExp.forEach(x=>{ const st=apprState(x.uid,x.id); if(st==="approved")appr+=x.amount||0; else if(st==="rejected")rej+=x.amount||0; else pend+=x.amount||0; });
-  const expById={}; appExp.forEach(x=>{ expById[x.id]=x; });
-  const reimb={}; e.filter(x=>x.kind==="ADVANCE").forEach(x=>{ (reimb[x.surveyor]=reimb[x.surveyor]||{adv:0,appr:0,pend:0}).adv+=x.amount||0; });
-  appExp.forEach(x=>{ const r=reimb[x.surveyor]=reimb[x.surveyor]||{adv:0,appr:0,pend:0}; const st=apprState(x.uid,x.id); if(st==="approved")r.appr+=x.amount||0; else if(st!=="rejected")r.pend+=x.amount||0; });
+  const dists=[...new Set(e.filter(x=>x.projectName).map(x=>x.projectName))].sort();
+  if(_expDist && !dists.includes(_expDist)) _expDist="";
+  const exp=e.filter(x=>x.kind==="EXPENSE" && (!_expDist||x.projectName===_expDist));
+  const total=sum(exp);
+  const cats={}; exp.forEach(x=>cats[x.category||"Misc"]=(cats[x.category||"Misc"]||0)+(x.amount||0));
+  const isFine=c=>(c||"").toLowerCase().includes("fine")||(c||"").toLowerCase().includes("police");
+  const catIcon=c=>({Fuel:"⛽",Hotel:"🏨",Food:"🍱",Toll:"🛣️","Police Fine":"🚓","Police fine":"🚓",Travel:"🚌",Driver:"🧑‍✈️","Daily wages":"💵",Parking:"🅿️",Misc:"💼",Other:"💼"}[c]||"🧾");
   const canApprove=(ROLE==="admin"||ROLE==="manager");
+  const bySur={}; e.filter(x=>(!_expDist||x.projectName===_expDist)).forEach(x=>{ const s=bySur[x.uid]=bySur[x.uid]||{uid:x.uid,name:x.surveyor,adv:0,sp:0}; if(x.kind==="ADVANCE")s.adv+=x.amount||0; else if(x.paymentMode!=="Company")s.sp+=x.amount||0; });
+  const catCard=(c,a)=>`<div class="card" style="padding:13px 15px"><div style="font-size:20px">${catIcon(c)}</div><div style="font-size:21px;font-weight:800;margin-top:5px;color:${isFine(c)?'var(--danger)':'var(--ink)'}">${money(a)}</div><div style="font-size:11px;color:var(--soft)">${esc(c)}</div></div>`;
+  const tab=(k,l)=>`<button class="exTab" data-t="${k}" style="border:none;background:${_expTab===k?'var(--brand)':'transparent'};color:${_expTab===k?'var(--brand-text)':'var(--soft)'};border-radius:50px;padding:6px 16px;font-size:13px;font-weight:700;cursor:pointer">${l}</button>`;
   $("#expenses").innerHTML=`
-    <div class="grid">${stat("Advance",money(advance),'hero')}${stat("Spent (team)",money(spentYou))}${stat(bal>=0?"To return":"Overspent",money(Math.abs(bal)))}${stat("Paid by company",money(company))}</div>
-    <div class="filters" style="margin-top:14px"><button class="btn y" id="eCsv">CSV</button><button class="btn y" id="eXls">Excel</button><button class="btn y" id="ePdf">PDF</button><button class="btn" onclick="window.print()">Print</button></div>
-    <div class="sec">✅ APPROVALS — ${canApprove?"approve / reject each expense (field user sees it after app sync)":"status set by your manager"}</div>
-    <div class="grid">${stat("Approved",money(appr))}${stat("Pending review",money(pend))}${stat("Rejected",money(rej))}</div>
-    <div class="filters" style="margin-top:8px">
-      <select id="apSur"><option value="">All field users</option>${[...new Set(appExp.map(x=>x.surveyor))].sort().map(n=>`<option>${esc(n)}</option>`).join("")}</select>
-      <select id="apSt"><option value="">All status</option><option value="pending">Pending</option><option value="approved">Approved</option><option value="rejected">Rejected</option></select>
+    <div style="display:flex;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:14px">
+      <div style="flex:1;min-width:150px;font-size:18px;font-weight:800">Expenses</div>
+      <select id="exDist" style="min-width:180px"><option value="">All distributors</option>${dists.map(d=>`<option ${d===_expDist?"selected":""}>${esc(d)}</option>`).join("")}</select>
+      <button class="btn" id="eXls">↓ Export Excel</button>
     </div>
-    <div id="apList" class="tablewrap"></div>
+    <div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(140px,1fr))">
+      ${Object.entries(cats).sort((a,b)=>b[1]-a[1]).map(([c,a])=>catCard(c,a)).join("")||`<div class="card loading">No expenses in this view.</div>`}
+    </div>
+    <div class="card" style="margin-top:14px">
+      <div style="display:flex;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:8px">
+        <b style="font-size:15px">${money(total)} total · ${esc(_expDist||"All distributors")}</b>
+        <div style="margin-left:auto;display:flex;gap:4px;background:var(--bg);border-radius:50px;padding:3px">${tab("all","All")}${tab("pending","Pending")}${tab("approved","Approved")}</div>
+      </div>
+      <div class="tablewrap" id="exTbl"></div>
+    </div>
     <div class="sec">BY FIELD USER — tap 🧾 for the full ledger (khata)</div>
     <div class="tablewrap"><table><tr><th>Field User</th><th>Advance</th><th>Spent</th><th>Balance</th><th></th></tr>
-      ${Object.values(bySur).sort((a,b)=>b.sp-a.sp).map(s=>`<tr><td><b>${esc(s.name)}</b></td><td>${money(s.adv)}</td><td>${money(s.sp)}</td><td style="font-weight:700;color:${s.adv-s.sp>=0?'var(--green)':'var(--red)'}">${money(s.adv-s.sp)}</td><td><button class="btn ledLink" data-uid="${esc(s.uid)}" style="padding:4px 10px">🧾 Ledger</button></td></tr>`).join("")||`<tr><td colspan="5" style="color:var(--soft);padding:12px">No data.</td></tr>`}
-    </table></div>
-    <div class="sec">BY PROJECT — expense per project</div>
-    <div class="tablewrap"><table><tr><th>Project</th><th>Team spent</th><th>Company-paid</th><th>Total</th></tr>
-      ${Object.entries(byProj).sort((a,b)=>(b[1].sp+b[1].comp)-(a[1].sp+a[1].comp)).map(([p,v])=>`<tr><td><b>${esc(p)}</b></td><td>${money(v.sp)}</td><td>${money(v.comp)}</td><td style="font-weight:700">${money(v.sp+v.comp)}</td></tr>`).join("")||`<tr><td colspan="4" style="color:var(--soft);padding:12px">No data.</td></tr>`}
-    </table></div>
-    <div class="sec">BY CATEGORY</div>
-    <div class="tablewrap"><table><tr><th>Category</th><th>Amount</th></tr>
-      ${Object.entries(cats).sort((a,b)=>b[1]-a[1]).map(([c,a])=>`<tr><td>${esc(c)}</td><td>${money(a)}</td></tr>`).join("")}
-    </table></div>
-    <div class="sec">💰 REIMBURSEMENT — based on APPROVED expenses</div>
-    <div class="tablewrap"><table><tr><th>Field User</th><th>Advance</th><th>Approved spent</th><th>Pending</th><th>To settle</th></tr>
-      ${Object.entries(reimb).sort((a,b)=>b[1].appr-a[1].appr).map(([n,r])=>{ const settle=r.adv-r.appr; return `<tr><td><b>${esc(n)}</b></td><td>${money(r.adv)}</td><td>${money(r.appr)}</td><td>${money(r.pend)}</td><td style="font-weight:700;color:${settle>=0?'var(--green)':'var(--red)'}">${settle>=0?money(settle)+" to return":money(-settle)+" to pay"}</td></tr>`; }).join("")||`<tr><td colspan="5" style="color:var(--soft);padding:12px">No data.</td></tr>`}
+      ${Object.values(bySur).filter(s=>s.adv||s.sp).sort((a,b)=>b.sp-a.sp).map(s=>`<tr><td><b>${esc(s.name)}</b></td><td>${money(s.adv)}</td><td>${money(s.sp)}</td><td style="font-weight:700;color:${s.adv-s.sp>=0?'var(--green)':'var(--red)'}">${money(s.adv-s.sp)}</td><td><button class="btn ledLink" data-uid="${esc(s.uid)}" style="padding:4px 10px">🧾 Ledger</button></td></tr>`).join("")||`<tr><td colspan="5" style="color:var(--soft);padding:12px">No data.</td></tr>`}
     </table></div>`;
-  const drawAppr=()=>{
-    const sur=$("#apSur").value, stf=$("#apSt").value;
-    const list=appExp.filter(x=>!sur||x.surveyor===sur).map(x=>({x,st:apprState(x.uid,x.id)})).filter(o=>!stf||o.st===stf).sort((a,b)=>(b.x.date||0)-(a.x.date||0));
-    $("#apList").innerHTML=`<table><tr><th>Date</th><th>Field User</th><th>Category</th><th>Amount</th><th>Note</th><th>Status</th>${canApprove?"<th>Action</th>":""}</tr>`+
-      (list.length?list.map(({x,st})=>`<tr><td>${fmtDate(x.date)}</td><td>${esc(x.surveyor)}</td><td>${esc(x.category||"")}</td><td>${money(x.amount)}</td><td class="wrap">${esc(x.note||x.projectName||"")}${(x.billPhotos&&x.billPhotos.length)?` <span class="photocount billLink" data-e="${esc(x.id)}">📷${x.billPhotos.length}</span>`:""}</td>
-        <td>${stPill(st)}</td>${canApprove?`<td style="white-space:nowrap">
-          ${st!=="approved"?`<button class="btn" data-a="approved" data-u="${esc(x.uid)}" data-e="${esc(x.id)}" style="background:#e8f5ec;color:#1B873F">✓ Approve</button> `:""}
-          ${st!=="rejected"?`<button class="btn" data-a="rejected" data-u="${esc(x.uid)}" data-e="${esc(x.id)}" style="background:#fdecec;color:#a3302a">✗ Reject</button> `:""}
-          ${st!=="pending"?`<button class="btn" data-a="pending" data-u="${esc(x.uid)}" data-e="${esc(x.id)}">↺</button>`:""}</td>`:""}</tr>`).join("")
-      :`<tr><td colspan="${canApprove?7:6}" style="color:var(--soft);padding:14px">No expenses to show.</td></tr>`)+`</table>`;
-    $("#apList").querySelectorAll("button[data-a]").forEach(b=>b.onclick=()=>setApproval(b.dataset.u,b.dataset.e,b.dataset.a));
-    $("#apList").querySelectorAll(".billLink").forEach(b=>b.onclick=()=>openBills(expById[b.dataset.e]));
+  const expById={}; exp.forEach(x=>expById[x.id]=x);
+  const drawTbl=()=>{
+    let rows=exp.slice().sort((a,b)=>(b.date||0)-(a.date||0));
+    if(_expTab!=="all") rows=rows.filter(x=>x.paymentMode!=="Company" && apprState(x.uid,x.id)===_expTab);
+    $("#exTbl").innerHTML=`<table><tr><th>Category</th><th>Surveyor</th><th>Detail</th><th>Date</th><th>Amount</th><th>Approval</th></tr>`+
+      (rows.length?rows.map(x=>{ const comp=x.paymentMode==="Company", st=apprState(x.uid,x.id);
+        const appCell=comp?`<span class="pill" style="background:var(--line);color:var(--soft)">Company</span>`:`${stPill(st)}${canApprove?` <span style="white-space:nowrap">${st!=="approved"?`<button class="btn exAp" data-a="approved" data-u="${esc(x.uid)}" data-e="${esc(x.id)}" style="padding:2px 8px;background:#e8f5ec;color:#1B873F">✓</button>`:""}${st!=="rejected"?`<button class="btn exAp" data-a="rejected" data-u="${esc(x.uid)}" data-e="${esc(x.id)}" style="padding:2px 8px;background:#fdecec;color:#a3302a">✗</button>`:""}</span>`:""}`;
+        return `<tr><td class="wrap"><b>${catIcon(x.category)} ${esc(x.category||"Misc")}</b></td><td>${esc(x.surveyor||"")}</td><td class="wrap">${esc(x.note||x.projectName||"")}${(x.billPhotos&&x.billPhotos.length)?` <span class="photocount billLink" data-e="${esc(x.id)}">📷${x.billPhotos.length}</span>`:""}</td><td style="white-space:nowrap">${fmtDate(x.date)}</td><td style="font-weight:700;color:${isFine(x.category)?'var(--danger)':'var(--ink)'}">${money(x.amount)}</td><td>${appCell}</td></tr>`; }).join("")
+      :`<tr><td colspan="6" style="color:var(--soft);padding:14px">No expenses to show.</td></tr>`)+`</table>`;
+    $("#exTbl").querySelectorAll(".exAp").forEach(b=>b.onclick=()=>setApproval(b.dataset.u,b.dataset.e,b.dataset.a));
+    $("#exTbl").querySelectorAll(".billLink").forEach(b=>b.onclick=()=>openBills(expById[b.dataset.e]));
   };
-  $("#apSur").onchange=$("#apSt").onchange=drawAppr; drawAppr();
+  drawTbl();
+  $("#exDist").onchange=()=>{ _expDist=$("#exDist").value; renderExpenses(); };
+  document.querySelectorAll("#expenses .exTab").forEach(b=>b.onclick=()=>{ _expTab=b.dataset.t; renderExpenses(); });
   $("#expenses").querySelectorAll(".ledLink").forEach(b=>b.onclick=()=>openLedger(b.dataset.uid));
-  const H=["Field User","Date","Kind","Category","Amount","Project","Payment","Note","Approval"];
-  const rows=()=> e.slice().sort((a,b)=>(b.date||0)-(a.date||0)).map(x=>[x.surveyor,fmtDate(x.date),x.kind,x.category,x.amount,x.projectName||"",x.paymentMode||"",x.note||"",x.kind==="EXPENSE"&&x.paymentMode!=="Company"?apprState(x.uid,x.id):""]);
-  $("#eCsv").onclick=()=>csv("expenses",H,rows()); $("#eXls").onclick=()=>xlsx("expenses",H,rows()); $("#ePdf").onclick=()=>pdf("Expenses",H,rows());
+  const H=["Field User","Date","Kind","Category","Amount","Distributor","Payment","Note","Approval"];
+  const xrows=()=> e.filter(x=>!_expDist||x.projectName===_expDist).slice().sort((a,b)=>(b.date||0)-(a.date||0)).map(x=>[x.surveyor,fmtDate(x.date),x.kind,x.category,x.amount,x.projectName||"",x.paymentMode||"",x.note||"",x.kind==="EXPENSE"&&x.paymentMode!=="Company"?apprState(x.uid,x.id):""]);
+  $("#eXls").onclick=()=>xlsx("expenses"+(_expDist?"_"+_expDist:""),H,xrows());
 }
 
 // Per-user expense ledger (khata) — advance IN / spent OUT with a running balance, period-aware.
@@ -905,33 +901,51 @@ async function setApproval(uid,eid,state){
 }
 
 // ── Analytics (Chart.js) ──
-let _charts=[];
+let _charts=[], _anWin=7;
 function renderAnalytics(){
   _charts.forEach(c=>{ try{ c.destroy(); }catch(e){} }); _charts=[];
-  const r=fRecces(), e=fExpenses();
-  const days=[]; for(let i=13;i>=0;i--){ const d=new Date(); d.setHours(0,0,0,0); d.setDate(d.getDate()-i); days.push(d.getTime()); }
-  const dayLabels=days.map(t=>new Date(t).toLocaleDateString("en-IN",{day:"2-digit",month:"short"}));
-  const dayCounts=days.map(t=>r.filter(x=>x.date>=t&&x.date<t+86400000).length);
-  const stC={}; r.forEach(x=>stC[x.status||"—"]=(stC[x.status||"—"]||0)+1);
-  const cat={}; e.filter(x=>x.kind==="EXPENSE").forEach(x=>cat[x.category||"Other"]=(cat[x.category||"Other"]||0)+(x.amount||0));
-  const proj={}; e.filter(x=>x.kind==="EXPENSE"&&x.paymentMode!=="Company").forEach(x=>{ const p=x.projectName||"General"; (proj[p]=proj[p]||{spend:0,done:0}).spend+=x.amount||0; });
-  r.forEach(x=>{ const p=x.project||"General"; (proj[p]=proj[p]||{spend:0,done:0}).done++; });
+  const allR=DATA.recces||[];
+  const iu=installUnits(allR);
+  // install status mix (cumulative)
+  let iInstalled=0,iPartial=0,iIssues=0,iCancelled=0;
+  iu.forEach(o=>{ const st=o.fi&&o.fi.status; if(st==="Installed")iInstalled++; else if(st==="InProgress")iPartial++; else if(st==="NotDone"){ const rs=((o.fi&&o.fi.reason)||"").toLowerCase(); if(rs.includes("clos")||rs.includes("refus")||rs.includes("mov"))iCancelled++; else iIssues++; } });
+  const doneTot=iInstalled+iPartial+iIssues+iCancelled;
+  // installations trend (windowed by install date, fallback recce date)
+  const nb=_anWin<=7?7:_anWin<=31?_anWin:13, span=_anWin<=31?86400000:7*86400000;
+  const buckets=[]; { const base=new Date(); base.setHours(0,0,0,0); for(let i=nb-1;i>=0;i--) buckets.push(base.getTime()-i*span); }
+  const instDone=iu.filter(o=>o.fi&&o.fi.status==="Installed");
+  const dayCounts=buckets.map(t=>instDone.filter(o=>{ const at=(o.fi&&o.fi.at)||o.r.date||0; return at>=t&&at<t+span; }).length);
+  const totalInst=dayCounts.reduce((a,b)=>a+b,0);
+  const dayLabels=buckets.map(t=>new Date(t).toLocaleDateString("en-IN",_anWin<=7?{weekday:"short"}:{day:"2-digit",month:"short"}));
+  // completion by distributor (cumulative install-shops / shops)
+  const byD={}; (DATA.shops||[]).forEach(s=>{ const p=s.project||"General"; (byD[p]=byD[p]||{shops:0}).shops++; });
+  const sm={}; iu.forEach(o=>{ const p=o.r.project||"General", sid=o.r.id; (sm[p]=sm[p]||{}); const sh=sm[p][sid]=sm[p][sid]||{u:0,inst:0}; sh.u++; if(o.fi&&o.fi.status==="Installed")sh.inst++; });
+  const comp=Object.entries(byD).filter(([p])=>p!=="General").map(([p,v])=>{ const m=sm[p]||{}; let inS=0; Object.values(m).forEach(sh=>{ if(sh.inst>0&&sh.inst===sh.u)inS++; }); return {p,pct:v.shops?Math.round(inS*100/v.shops):0}; }).sort((a,b)=>b.pct-a.pct).slice(0,8);
+  // media type split (cumulative)
+  const mt={}; allR.forEach(r=>(r.media||[]).forEach(m=>{ if(m.type)mt[m.type]=(mt[m.type]||0)+(m.qty||1); }));
+  const media=Object.entries(mt).sort((a,b)=>b[1]-a[1]).slice(0,8);
+  const winBtn=(n,l)=>`<button class="anWin btn ${_anWin===n?'y':''}" data-w="${n}">${l}</button>`;
+  const maxComp=Math.max(1,...comp.map(c=>c.pct)), maxMedia=Math.max(1,...media.map(m=>m[1]));
+  const barRow=(l,v,max,suf)=>`<div style="margin-bottom:11px"><div style="display:flex;font-size:13px;font-weight:700"><span style="flex:1">${esc(l)}</span><span style="color:var(--brand-d)">${v}${suf||""}</span></div><div class="bar" style="margin-top:5px"><i style="width:${max?Math.round(v*100/max):0}%"></i></div></div>`;
   $("#analytics").innerHTML=`
-    ${perfSubnav('analytics')}
-    <div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(290px,1fr))">
-      <div class="card"><div class="sec" style="margin-top:0">DAILY SURVEYS · 14 days</div><canvas id="cDaily" height="170"></canvas></div>
-      <div class="card"><div class="sec" style="margin-top:0">STATUS BREAKDOWN</div><canvas id="cStatus" height="170"></canvas></div>
-      <div class="card"><div class="sec" style="margin-top:0">EXPENSES BY CATEGORY</div><canvas id="cCat" height="170"></canvas></div>
+    <div style="display:flex;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:14px">
+      <div style="flex:1;min-width:140px;font-size:18px;font-weight:800">Analytics</div>
+      <div class="filters" style="gap:6px">${winBtn(7,"7 days")}${winBtn(30,"30 days")}${winBtn(90,"Quarter")}</div>
     </div>
-    <div class="sec">PER-PROJECT P&amp;L</div>
-    <div class="tablewrap"><table><tr><th>Project</th><th>Surveyed</th><th>Spend</th></tr>
-      ${Object.entries(proj).filter(([p])=>p!=="General").sort((a,b)=>b[1].spend-a[1].spend).map(([p,v])=>`<tr><td><b>${esc(p)}</b></td><td>${v.done}</td><td>${money(v.spend)}</td></tr>`).join("")}
-    </table></div>`;
-  const opt={responsive:true,plugins:{legend:{display:false}},scales:{y:{beginAtZero:true}}};
-  _charts.push(new Chart($("#cDaily"),{type:"bar",data:{labels:dayLabels,datasets:[{data:dayCounts,backgroundColor:"#FFC400"}]},options:opt}));
-  _charts.push(new Chart($("#cStatus"),{type:"doughnut",data:{labels:Object.keys(stC),datasets:[{data:Object.values(stC),backgroundColor:["#E0A800","#C0605F","#888888","#5DA9E9","#59C28A"]}]},options:{plugins:{legend:{position:"bottom"}}}}));
-  _charts.push(new Chart($("#cCat"),{type:"bar",data:{labels:Object.keys(cat),datasets:[{data:Object.values(cat),backgroundColor:"#E69100"}]},options:{...opt,indexAxis:"y"}}));
-  wirePF();
+    <div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(320px,1fr))">
+      <div class="card"><div style="display:flex;align-items:center;margin-bottom:8px"><b style="font-size:14.5px">Installations</b><span style="margin-left:auto;font-size:12px;color:var(--soft)">${totalInst} total</span></div><div style="height:175px"><canvas id="cInst"></canvas></div></div>
+      <div class="card"><div style="display:flex;align-items:center;margin-bottom:10px"><b style="font-size:14.5px">Install status mix</b><span style="margin-left:auto;font-size:12px;color:var(--soft)">${doneTot} units</span></div>
+        <div style="display:flex;gap:16px;align-items:center;flex-wrap:wrap"><div style="position:relative;width:150px;height:150px"><canvas id="cMix"></canvas><div style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;pointer-events:none"><div style="font-size:26px;font-weight:800">${iInstalled}</div><div style="font-size:9px;letter-spacing:1px;color:var(--soft)">DONE</div></div></div>
+        <div style="flex:1;min-width:130px">${[["Installed",iInstalled,"#FFC400"],["Partial",iPartial,"#E0A93B"],["Issues",iIssues,"#E08A3B"],["Cancelled",iCancelled,"#B3261E"]].map(x=>`<div style="display:flex;align-items:center;gap:8px;padding:4px 0;font-size:13px"><span style="width:10px;height:10px;border-radius:3px;background:${x[2]}"></span><span style="flex:1">${x[0]}</span><b>${x[1]}</b></div>`).join("")}</div></div>
+      </div>
+    </div>
+    <div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(320px,1fr));margin-top:12px">
+      <div class="card"><b style="font-size:14.5px">Completion by distributor</b><div style="margin-top:13px">${comp.length?comp.map(c=>barRow(c.p,c.pct,maxComp,"%")).join(""):`<div style="color:var(--soft);font-size:13px">No data.</div>`}</div></div>
+      <div class="card"><b style="font-size:14.5px">Media type split</b><div style="margin-top:13px">${media.length?media.map(m=>barRow(m[0],m[1],maxMedia,"")).join(""):`<div style="color:var(--soft);font-size:13px">No data.</div>`}</div></div>
+    </div>`;
+  _charts.push(new Chart($("#cInst"),{type:"bar",data:{labels:dayLabels,datasets:[{data:dayCounts,backgroundColor:"#FFC400",borderRadius:6,maxBarThickness:46}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:{grid:{display:false}},y:{beginAtZero:true,ticks:{precision:0}}}}}));
+  _charts.push(new Chart($("#cMix"),{type:"doughnut",data:{labels:["Installed","Partial","Issues","Cancelled"],datasets:[{data:[iInstalled,iPartial,iIssues,iCancelled],backgroundColor:["#FFC400","#E0A93B","#E08A3B","#B3261E"],borderWidth:0}]},options:{responsive:true,maintainAspectRatio:false,cutout:"70%",plugins:{legend:{display:false}}}}));
+  document.querySelectorAll("#analytics .anWin").forEach(b=>b.onclick=()=>{ _anWin=+b.dataset.w; renderAnalytics(); });
 }
 
 // ── Map (Leaflet + OpenStreetMap) ──

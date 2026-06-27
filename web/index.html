@@ -954,33 +954,46 @@ function renderMap(){
   const recces=fRecces().filter(x=>x.lat&&x.lng);
   const installs=(DATA.installPoints||[]).filter(x=>x.lat&&x.lng);
   const vehicles=FLEET.filter(v=>v.lat&&v.lng);
-  $("#map").innerHTML=`${perfSubnav('map')}
-    <div class="filters" style="gap:16px;align-items:center">
-      <label style="font-size:13px;cursor:pointer"><input type="checkbox" id="mRec" checked> 🟡 Recce · ${recces.length}</label>
-      <label style="font-size:13px;cursor:pointer"><input type="checkbox" id="mIns" checked> 🟢 Installations · ${installs.length}</label>
-      <label style="font-size:13px;cursor:pointer"><input type="checkbox" id="mVeh" checked> 🚗 Vehicles · ${vehicles.length}</label>
+  const pendingCount=Math.max(0,(DATA.shops||[]).length-fRecces().length);
+  const pts=[...installs.map(x=>({lat:x.lat,lng:x.lng,shop:x.shop,city:x.city,sub:[x.media,x.size].filter(Boolean).join(" · "),ins:true,pill:["Installed","#1B873F","#E8F5EC"]})),
+    ...recces.map(x=>({lat:x.lat,lng:x.lng,shop:x.shop,city:x.city,sub:x.surveyor+" · "+fmtDate(x.date),ins:false,pill:["Recce done","#5C615F","#EEF0F2"]}))];
+  const chip=(k,l,n)=>`<button class="mpChip" data-k="${k}" style="border:1px solid var(--line);background:var(--card);color:var(--ink);border-radius:50px;padding:6px 14px;font-size:12.5px;font-weight:700;cursor:pointer;white-space:nowrap">${l}${n!=null?` <span style="opacity:.6">${n}</span>`:""}</button>`;
+  $("#map").innerHTML=`
+    <div style="display:flex;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:14px">
+      <div style="flex:1;min-width:150px;font-size:18px;font-weight:800">Field map</div>
+      <div class="filters" id="mpChips" style="gap:7px">${chip("all","All")}${chip("ins","Installed",installs.length)}${chip("rec","Recce",recces.length)}${chip("veh","Vehicles",vehicles.length)}</div>
     </div>
-    <div class="card" style="padding:0;overflow:hidden"><div id="leaflet" style="height:560px"></div></div>
-    <div style="font-size:12px;color:var(--soft);margin-top:8px">🟡 Recce = field-user survey point · 🟢 Installation = where the media was installed · 🚗 Vehicle = last fuel/service GPS. Toggle each layer above.</div>`;
-  wirePF();
+    <div class="card" style="padding:0;overflow:hidden;position:relative">
+      <div id="leaflet" style="height:540px"></div>
+      <div style="position:absolute;top:12px;right:12px;z-index:1000;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:10px 13px;box-shadow:var(--shadow);font-size:12.5px">
+        <div style="display:flex;align-items:center;gap:7px;padding:2px 0"><span style="width:9px;height:9px;border-radius:50%;background:#FFC400"></span>Installed · <b>${installs.length}</b></div>
+        <div style="display:flex;align-items:center;gap:7px;padding:2px 0"><span style="width:9px;height:9px;border-radius:50%;background:#9aa3ad"></span>Recce done · <b>${recces.length}</b></div>
+        <div style="display:flex;align-items:center;gap:7px;padding:2px 0"><span style="width:9px;height:9px;border-radius:50%;background:#B3261E"></span>Pending · <b>${pendingCount}</b></div>
+      </div>
+    </div>
+    <div class="card" style="margin-top:14px">
+      <div style="display:flex;align-items:center;margin-bottom:6px"><b style="font-size:14.5px">Geo-stamped points</b><span style="margin-left:auto;font-size:12px;color:var(--soft)">Tap a row to locate</span></div>
+      ${pts.length?pts.slice(0,50).map((p,i)=>`<div class="mpPt" data-i="${i}" style="display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid var(--line);cursor:pointer"><span style="width:9px;height:9px;border-radius:50%;background:${p.ins?'#FFC400':'#9aa3ad'};flex:0 0 auto"></span><div style="flex:1;min-width:0"><b style="font-size:13px">${esc(p.shop)}</b><br><span style="font-size:11px;color:var(--soft)">${p.lat.toFixed(4)}, ${p.lng.toFixed(4)}${p.city?" · "+esc(p.city):""}${p.sub?" · "+esc(p.sub):""}</span></div><span class="pill" style="background:${p.pill[2]};color:${p.pill[1]}">${p.pill[0]}</span></div>`).join(""):`<div style="color:var(--soft);font-size:13px;padding:10px 0">No geo-stamped points in this period.</div>`}
+    </div>`;
   setTimeout(()=>{
     try{ if(_map){ _map.remove(); _map=null; } }catch(e){}
     _map=L.map("leaflet");
     L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",{attribution:"© OpenStreetMap",maxZoom:19}).addTo(_map);
-    const col={Interested:"#E0A800","Not Interested":"#C0605F",Closed:"#888888"};
-    const icol={Installed:"#2E7D32",InProgress:"#B8890C",NotDone:"#C0605F"};
-    const recceLayer=L.layerGroup(), installLayer=L.layerGroup(), vehLayer=L.layerGroup();
-    const bounds=[];
-    recces.forEach(x=>{ L.circleMarker([x.lat,x.lng],{radius:6,color:col[x.status]||"#5DA9E9",fillColor:col[x.status]||"#5DA9E9",fillOpacity:.85,weight:1})
-      .bindPopup(`🟡 <b>${esc(x.shop)}</b><br>${esc(x.city)} · ${esc(x.status)}<br>${esc(x.surveyor)} · ${fmtDate(x.date)}`).addTo(recceLayer); bounds.push([x.lat,x.lng]); });
-    installs.forEach(x=>{ L.circleMarker([x.lat,x.lng],{radius:8,color:"#14532D",fillColor:icol[x.status]||"#5DA9E9",fillOpacity:.9,weight:2})
-      .bindPopup(`🟢 <b>${esc(x.shop)}</b> — ${esc(x.status)}${x.reason?` (${esc(x.reason)})`:""}<br>${esc([x.media,x.size].filter(Boolean).join(" · "))}<br>${esc(x.city)} · ${esc(x.surveyor)}`).addTo(installLayer); bounds.push([x.lat,x.lng]); });
+    const recceLayer=L.layerGroup(), installLayer=L.layerGroup(), vehLayer=L.layerGroup(), bounds=[];
+    recces.forEach(x=>{ L.circleMarker([x.lat,x.lng],{radius:6,color:"#9aa3ad",fillColor:"#9aa3ad",fillOpacity:.85,weight:1})
+      .bindPopup(`<b>${esc(x.shop)}</b><br>${esc(x.city)} · ${esc(x.status)}<br>${esc(x.surveyor)} · ${fmtDate(x.date)}`).addTo(recceLayer); bounds.push([x.lat,x.lng]); });
+    installs.forEach(x=>{ L.circleMarker([x.lat,x.lng],{radius:7,color:"#B8890C",fillColor:"#FFC400",fillOpacity:.95,weight:2})
+      .bindPopup(`<b>${esc(x.shop)}</b> — ${esc(x.status)}${x.reason?` (${esc(x.reason)})`:""}<br>${esc([x.media,x.size].filter(Boolean).join(" · "))}<br>${esc(x.city)}`).addTo(installLayer); bounds.push([x.lat,x.lng]); });
     vehicles.forEach(v=>{ L.marker([v.lat,v.lng],{icon:L.divIcon({className:'',html:'<div style="font-size:22px;line-height:1">🚗</div>',iconSize:[24,24],iconAnchor:[12,12]})})
       .bindPopup(`🚗 <b>${esc(v.name||v.number||"Vehicle")}</b><br>${esc([v.number,v.model].filter(Boolean).join(" · "))}`).addTo(vehLayer); bounds.push([v.lat,v.lng]); });
     recceLayer.addTo(_map); installLayer.addTo(_map); vehLayer.addTo(_map);
     if(bounds.length) _map.fitBounds(bounds,{padding:[30,30],maxZoom:15}); else _map.setView([20.59,78.96],5);
-    const tog=(id,layer)=>{ const el=$("#"+id); if(el) el.onchange=()=>{ if(el.checked) layer.addTo(_map); else _map.removeLayer(layer); }; };
-    tog("mRec",recceLayer); tog("mIns",installLayer); tog("mVeh",vehLayer);
+    const markers=[...installs.map(x=>[x.lat,x.lng]),...recces.map(x=>[x.lat,x.lng])];
+    document.querySelectorAll("#map .mpPt").forEach(el=>el.onclick=()=>{ const m=markers[+el.dataset.i]; if(m){ _map.setView(m,16); window.scrollTo(0,0); } });
+    const show=k=>{ [recceLayer,installLayer,vehLayer].forEach(l=>{ try{_map.removeLayer(l);}catch(e){} }); if(k==="all"){ recceLayer.addTo(_map); installLayer.addTo(_map); vehLayer.addTo(_map); } else if(k==="ins") installLayer.addTo(_map); else if(k==="rec") recceLayer.addTo(_map); else if(k==="veh") vehLayer.addTo(_map); };
+    const chips=document.querySelectorAll("#mpChips .mpChip");
+    chips.forEach(b=>b.onclick=()=>{ chips.forEach(x=>{ x.style.background="var(--card)"; x.style.color="var(--ink)"; }); b.style.background="var(--brand)"; b.style.color="var(--brand-text)"; show(b.dataset.k); });
+    if(chips[0]){ chips[0].style.background="var(--brand)"; chips[0].style.color="var(--brand-text)"; }
   },60);
 }
 
@@ -993,43 +1006,57 @@ function surveyorDistance(uid){
   let km=0; for(const k in byDay){ const a=byDay[k]; for(let i=1;i<a.length;i++) km+=haversine(a[i-1],a[i]); }
   return km;
 }
-function renderFleet(){
-  const exps=fExpenses(), surs=fSurveyors();
-  const fuelCats=["Fuel"], driverCats=["Driver","Daily wages"], travelCats=["Travel"];
-  const cost=(uid,cats)=>sum(exps.filter(x=>x.uid===uid&&x.kind==="EXPENSE"&&cats.includes(x.category)));
-  const rows=surs.map(s=>{ const fuel=cost(s.uid,fuelCats), driver=cost(s.uid,driverCats), travel=cost(s.uid,travelCats), km=surveyorDistance(s.uid);
-    return {...s, fuel, driver, travel, km, cpk:km?fuel/km:0, cps:s.surveyed?(fuel+travel)/s.surveyed:0}; }).filter(r=>r.fuel||r.km||r.driver||r.travel);
-  const totalFuel=rows.reduce((a,r)=>a+r.fuel,0), totalKm=rows.reduce((a,r)=>a+r.km,0), totalDriver=rows.reduce((a,r)=>a+r.driver,0);
-  const sub=`<div class="sec">🚚 FLEET ${RANGE.label!=="All time"?"· "+esc(RANGE.label):""}</div>
-    <div class="filters" style="gap:6px;margin-bottom:6px"><button class="btn ${_fleetView==='vehicles'?'y':''}" data-fv="vehicles">🚗 Vehicles</button><button class="btn ${_fleetView==='map'?'y':''}" data-fv="map">🗺️ Map</button><button class="btn y" id="vAdd" style="margin-left:auto">+ Add vehicle</button></div>`;
-  if(_fleetView==='map'){
-    $("#fleet").innerHTML=sub+`
-      <div class="sec">🗺️ MAP — 🚗 vehicle last-seen (from fuel/service GPS) + field-user route trail</div>
-      <div class="filters"><select id="flSur"><option value="">Select field user…</option>${surs.map(s=>`<option value="${esc(s.uid)}">${esc(s.name)}</option>`).join("")}</select><span style="font-size:12px;color:var(--soft)">Tip: set PERIOD to "Today" for one day's path</span></div>
-      <div class="card" style="padding:0;overflow:hidden"><div id="fleetmap" style="height:560px"></div></div>
-      <div style="font-size:11.5px;color:var(--soft);margin-top:7px">Distance = straight-line between consecutive shops (GPS) — approximate, not road distance.</div>`;
-    document.querySelectorAll("[data-fv]").forEach(b=>b.onclick=()=>{ _fleetView=b.dataset.fv; renderFleet(); });
-    $("#flSur").onchange=()=>drawTrail($("#flSur").value);
-    $("#vAdd").onclick=()=>{ _fleetView='vehicles'; vehicleForm(null); };
-    setTimeout(()=>{ try{ if(_fleetMap){ _fleetMap.remove(); _fleetMap=null; } }catch(e){}
-      _fleetMap=L.map("fleetmap"); L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",{attribution:"© OpenStreetMap",maxZoom:19}).addTo(_fleetMap); _fleetMap.setView([20.59,78.96],5);
-      const vm=FLEET.filter(v=>v.lat&&v.lng);
-      vm.forEach(v=>{ L.marker([v.lat,v.lng]).addTo(_fleetMap).bindPopup(`🚗 <b>${esc(v.name||v.number||"Vehicle")}</b><br>${esc([v.number,v.model].filter(Boolean).join(" · "))}`); });
-      if(vm.length) _fleetMap.setView([vm[0].lat,vm[0].lng], vm.length>1?7:13);
-    },60);
-  } else {
-    $("#fleet").innerHTML=sub+`
-      <div class="sec">🚗 COMPANY VEHICLES — live, shared with the app</div>
-      <div class="filters"><span style="font-size:12px;color:var(--soft)">Vehicles + fuel/service logs added in the app appear here automatically.</span></div>
-      <div id="vehList"><div class="loading">Loading vehicles…</div></div>
-      <div class="sec" style="margin-top:20px">⛽ FUEL & TRAVEL COST — BY FIELD USER ${RANGE.label!=="All time"?"· "+esc(RANGE.label):""}</div>
-      <div class="grid">${stat("Fuel spend",money(totalFuel),'hero')}${stat("Distance",Math.round(totalKm)+" km")}${stat("Cost / km",totalKm?money(totalFuel/totalKm):"—")}${stat("Driver + wages",money(totalDriver))}</div>
-      <div class="tablewrap"><table><tr><th>Field User</th><th>Fuel</th><th>Distance</th><th>Cost/km</th><th>Driver+wages</th><th>Cost/shop</th></tr>
-        ${rows.sort((a,b)=>b.fuel-a.fuel).map(r=>`<tr><td><b>${esc(r.name)}</b></td><td>${money(r.fuel)}</td><td>${Math.round(r.km)} km</td><td>${r.km?money(r.cpk):"—"}</td><td>${money(r.driver)}</td><td>${r.surveyed?money(r.cps):"—"}</td></tr>`).join("")||`<tr><td colspan="6" style="color:var(--soft);padding:14px">No fuel/travel/GPS data in this period.</td></tr>`}
-      </table></div>`;
-    document.querySelectorAll("[data-fv]").forEach(b=>b.onclick=()=>{ _fleetView=b.dataset.fv; renderFleet(); });
-    $("#vAdd").onclick=()=>vehicleForm(null); drawFleet();
-  }
+async function renderFleet(){
+  try{ const fl=await getDocs(collection(db,"fleet")); FLEET=fl.docs.map(d=>({id:d.id,...d.data()})); }catch(e){}
+  const V=FLEET.slice().sort((a,b)=>(a.name||a.number||"").localeCompare(b.name||b.number||""));
+  const bikes=V.filter(v=>v.type==="Bike").length, fourw=V.length-bikes;
+  const ecs=V.map(v=>vehEconomy(v)).filter(x=>x>0), avgEc=ecs.length?Math.round(ecs.reduce((a,b)=>a+b,0)/ecs.length):0;
+  const now=new Date(), mStart=new Date(now.getFullYear(),now.getMonth(),1).getTime();
+  let fuelAmt=0,fuelLit=0,fills=0; V.forEach(v=>(v.fuelLogs||[]).forEach(f=>{ if((f.date||0)>=mStart){ fuelAmt+=f.amount||0; fuelLit+=f.litres||0; fills++; } }));
+  const allAlerts=[]; V.forEach(v=>vehAlerts(v).forEach(a=>allAlerts.push({v,a})));
+  const expired=allAlerts.filter(o=>/EXPIRED|OVERDUE/.test(o.a)).length, due=allAlerts.length-expired;
+  const kpi=(lbl,val,ic,sub,red)=>`<div class="card" style="padding:15px"><div style="display:flex;align-items:center;justify-content:space-between"><span style="font-size:11px;font-weight:800;letter-spacing:.4px;color:var(--soft)">${lbl}</span><span style="font-size:15px">${ic}</span></div><div style="font-size:28px;font-weight:800;margin-top:4px;color:${red?'var(--danger)':'var(--ink)'}">${val}</div><div style="font-size:11px;color:${red?'var(--danger)':'var(--brand-d)'};margin-top:2px">${sub}</div></div>`;
+  const ymShort=e=>{ const d=new Date(e); return d.toLocaleDateString("en-IN",{month:"short"})+" '"+String(d.getFullYear()).slice(-2); };
+  const docPill=(lbl,e,need)=>{ if(need===false) return `<span class="pill" style="background:var(--line);color:var(--soft)">${lbl} n/a</span>`; if(!(e>0)) return `<span class="pill" style="background:var(--line);color:var(--soft)">${lbl} —</span>`; const x=Math.floor((e-Date.now())/86400000); return x<0?`<span class="pill" style="background:#FBEAE5;color:var(--danger)">${lbl} ✗ expired</span>`:`<span class="pill" style="background:#FFF6DC;color:var(--brand-d)">${lbl} ✓ ${ymShort(e)}</span>`; };
+  const svcLine=v=>{ const km=v.currentKm||0; let best=null; (v.maintItems||[]).forEach(mi=>{ if(mi.lastKm>0&&mi.intervalKm>0){ const rem=mi.lastKm+mi.intervalKm-km; if(best===null||rem<best.rem) best={name:mi.name,rem}; } }); if(!best) return `<span style="color:var(--soft)">🔧 No service interval set</span>`; if(best.rem<=0) return `<span style="color:var(--danger)">🔧 ${esc(best.name)} overdue <b>${-best.rem} km</b></span>`; return `<span style="color:var(--soft)">🔧 ${esc(best.name)} in <b>${best.rem.toLocaleString("en-IN")} km</b></span>`; };
+  const typeIc=t=>t==="Bike"?"🏍️":(t==="Transport vehicle"||t==="Transport")?"🚚":"🚗";
+  $("#fleet").innerHTML=`
+    <div style="display:flex;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:14px">
+      <div style="flex:1;min-width:150px;font-size:18px;font-weight:800">Fleet · ${V.length} vehicle${V.length===1?"":"s"}</div>
+      <button class="btn" id="flLog">↓ Fuel log</button>
+      <button class="btn y" id="vAdd">+ Add vehicle</button>
+    </div>
+    <div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(180px,1fr))">
+      ${kpi("VEHICLES",V.length,"🚙",`${bikes} bike${bikes===1?"":"s"} · ${fourw} four-wheel`)}
+      ${kpi("AVG MILEAGE",avgEc||"—","⛽",avgEc?"km / litre":"no fuel logs")}
+      ${kpi("FUEL · THIS MONTH",money(fuelAmt),"₹",`${Math.round(fuelLit)} L · ${fills} fill${fills===1?"":"s"}`)}
+      ${kpi("ALERTS",allAlerts.length,"⚠",allAlerts.length?`${expired} expired/overdue · ${due} due`:"all up to date",allAlerts.length>0)}
+    </div>
+    <div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(300px,1fr));margin-top:14px">
+      ${V.map(v=>{ const ec=vehEconomy(v), tm=vehTripMileage(v), hot=vehAlerts(v).length>0;
+        return `<div class="card vehCard" data-id="${esc(v.id)}" style="cursor:pointer;${hot?'border:1.5px solid #E6A6A6;':''}">
+          <div style="display:flex;align-items:center;gap:11px">
+            <div style="width:42px;height:42px;border-radius:11px;background:var(--dark);display:flex;align-items:center;justify-content:center;font-size:20px;flex:0 0 auto">${typeIc(v.type)}</div>
+            <div style="flex:1;min-width:0"><div style="font-weight:800;font-size:15px">${esc(v.number||v.name||"Vehicle")}</div><div style="font-size:11.5px;color:var(--soft);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc([[v.make,v.model].filter(Boolean).join(" "),v.year?fmtYM(v.year):"",v.type].filter(Boolean).join(" · "))}</div></div>
+            <div style="text-align:right;flex:0 0 auto"><div style="font-weight:800;font-size:15px">${(tm||ec)?(tm||ec).toFixed(0):"—"} <span style="font-size:10px;color:var(--soft)">km/l</span></div><div style="font-size:10.5px;color:var(--soft)">${(v.currentKm||0).toLocaleString("en-IN")} km</div></div>
+          </div>
+          <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:11px">${docPill("INS",v.insuranceExpiry)}${docPill("PUC",v.pucExpiry)}${docPill("FIT",v.fitnessExpiry,typeNeedsFitness(v.type))}</div>
+          <div style="border-top:1px solid var(--line);margin-top:11px;padding-top:9px;font-size:12px">${svcLine(v)}</div>
+        </div>`; }).join("")}
+      <div class="card" id="vAddCard" style="cursor:pointer;display:flex;align-items:center;justify-content:center;min-height:150px;border:1.5px dashed var(--line);color:var(--soft);font-weight:700;font-size:14px">+ Add vehicle</div>
+    </div>
+    <div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(320px,1fr));margin-top:14px">
+      <div class="card"><div style="display:flex;align-items:center;margin-bottom:6px"><b style="font-size:14.5px">Alerts</b><span style="margin-left:auto;font-size:12px;color:var(--soft)">${allAlerts.length} need action</span></div>
+        ${allAlerts.length?allAlerts.slice(0,8).map(o=>{ const exp=/EXPIRED|OVERDUE/.test(o.a); return `<div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--line)"><span style="width:30px;height:30px;border-radius:8px;background:${exp?'#FBEAE5':'#FFF6DC'};display:flex;align-items:center;justify-content:center;flex:0 0 auto">${exp?'⚠️':'🔧'}</span><div style="flex:1;min-width:0"><b style="font-size:12.5px">${esc(o.a)}</b><br><span style="font-size:11px;color:var(--soft)">${esc(o.v.number||o.v.name||"Vehicle")}${o.v.model?" · "+esc(o.v.model):""}</span></div></div>`; }).join(""):`<div style="color:var(--green);font-size:13px;padding:10px 0">✓ All vehicles up to date.</div>`}
+      </div>
+      <div class="card"><div style="display:flex;align-items:center;margin-bottom:10px"><b style="font-size:14.5px">Fuel economy</b><span style="margin-left:auto;font-size:11.5px;color:var(--soft)">km / litre</span></div>
+        ${(()=>{ const fe=V.map(v=>({v,ec:vehEconomy(v)})).filter(o=>o.ec>0).sort((a,b)=>b.ec-a.ec), mx=Math.max(1,...fe.map(o=>o.ec)); return fe.length?fe.map(o=>`<div style="margin-bottom:11px"><div style="display:flex;font-size:12.5px;font-weight:700"><span style="flex:1">${esc(o.v.number||o.v.name)}${o.v.model?` · <span style="color:var(--soft);font-weight:400">${esc(o.v.model)}</span>`:""}</span><span style="color:var(--brand-d)">${o.ec.toFixed(0)}</span></div><div class="bar" style="margin-top:5px"><i style="width:${Math.round(o.ec*100/mx)}%"></i></div></div>`).join(""):`<div style="color:var(--soft);font-size:13px">No fuel logs yet.</div>`; })()}
+      </div>
+    </div>`;
+  $("#vAdd").onclick=()=>vehicleForm(null);
+  { const c=$("#vAddCard"); if(c) c.onclick=()=>vehicleForm(null); }
+  $("#flLog").onclick=()=>{ const H=["Vehicle","Date","Litres","Amount","Rate","Odometer"], rows=[]; V.forEach(v=>(v.fuelLogs||[]).slice().sort((a,b)=>(b.date||0)-(a.date||0)).forEach(f=>rows.push([v.number||v.name||"",fmtDate(f.date),f.litres||"",f.amount||"",f.rate||(f.litres?Math.round((f.amount||0)/f.litres):""),f.odometer||""]))); xlsx("fuel_logs",H,rows); };
+  document.querySelectorAll("#fleet .vehCard").forEach(c=>c.onclick=()=>{ const v=V.find(x=>x.id===c.dataset.id); if(v) openVehicle(v); });
 }
 // ── Vehicles — full fleet management on the shared `fleet` collection (app + web, one source) ──
 const FLEET_TYPES=["Bike","Car","Transport vehicle","Other"];

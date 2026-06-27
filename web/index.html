@@ -169,6 +169,8 @@ import { getFirestore, collectionGroup, getDocs, doc, getDoc, setDoc, addDoc, de
   from "https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js";
 import { getStorage, ref, getDownloadURL }
   from "https://www.gstatic.com/firebasejs/10.12.5/firebase-storage.js";
+import { getFunctions, httpsCallable }
+  from "https://www.gstatic.com/firebasejs/10.12.5/firebase-functions.js";
 
 const firebaseConfig = {
   apiKey: "AIzaSyDfBgHtpt2Xo04W5NvPm2d5G7t6cSkHxUY",
@@ -183,6 +185,7 @@ const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
 const storage = getStorage(app);
+const functions = getFunctions(app);
 
 const $ = s => document.querySelector(s);
 const money = n => "₹" + Math.round(n||0).toLocaleString("en-IN");
@@ -192,7 +195,7 @@ const ago = ms => { if(!ms) return "—"; const d=Date.now()-ms; if(d<3600000) r
 const today = ()=> new Date().toISOString().slice(0,10);
 const accessRef = ()=> doc(db,"config","access");
 
-let DATA=null, ROLE=null, TARGETS={}, APPROVALS={}, INSTALL={}; const urlCache=new Map();
+let DATA=null, ROLE=null, TARGETS={}, APPROVALS={}, INSTALL={}, DISABLED={}; const urlCache=new Map();
 let CATALOG={companies:[],distributors:[]};   // shared admin-managed catalog (for dynamic Creative/Media)
 let FLEET=[];   // shared company vehicles (loaded for the Dashboard fleet card)
 const apprState=(uid,eid)=>(((APPROVALS[uid]||{}).statuses||{})[eid]||{}).state||"pending";
@@ -306,6 +309,7 @@ async function load(){
     try{ const ins=await getDocs(collection(db,"installations")); INSTALL={}; ins.forEach(d=>INSTALL[d.id]=d.data()||{}); }catch(e){ INSTALL={}; }
     try{ const cc=await getDoc(doc(db,"catalog","companies")), cd=await getDoc(doc(db,"catalog","distributors")); CATALOG={companies:JSON.parse((cc.exists()&&cc.data().json)||"[]"),distributors:JSON.parse((cd.exists()&&cd.data().json)||"[]")}; }catch(e){ CATALOG={companies:[],distributors:[]}; }
     try{ const fl=await getDocs(collection(db,"fleet")); FLEET=fl.docs.map(d=>({id:d.id,...d.data()})); }catch(e){ FLEET=[]; }
+    try{ const dis=await getDoc(doc(db,"config","disabled")); DISABLED=(dis.exists()&&dis.data())||{}; }catch(e){ DISABLED={}; }
     $("#status").classList.add("hidden");
     renderRangeBar(); renderOverview(); renderExpenses();
   }catch(e){
@@ -499,9 +503,15 @@ function openSurveyor(uid){
     <div class="tablewrap" style="max-height:260px;overflow:auto"><table><tr><th>Shop</th><th>City</th><th>Status</th><th>Date</th><th>📷</th></tr>
       ${r.slice(0,40).map(x=>`<tr><td class="wrap"><b>${esc(x.shop)}</b></td><td>${esc(x.city)}</td><td><span class="pill ${(x.status||"").replace(/ /g,"")}">${esc(x.status)}</span></td><td>${fmtDate(x.date)}</td><td>${x.photos.length||"—"}</td></tr>`).join("")||`<tr><td colspan="5" style="color:var(--soft);padding:14px">No recces in this period.</td></tr>`}
     </table></div>
+    ${ROLE==="admin"?`<div class="sec">MANAGE ACCESS</div><div class="card" style="display:flex;align-items:center;gap:10px">
+      <div style="flex:1;font-size:12.5px">Login: <b style="color:${DISABLED[uid]?'var(--red)':'#1B873F'}">${DISABLED[uid]?'Disabled':'Active'}</b></div>
+      <button class="btn ${DISABLED[uid]?'y':''}" id="suTog">${DISABLED[uid]?'Enable login':'Disable login'}</button></div>`:''}
     <div style="text-align:right;margin-top:10px"><button class="btn" id="suExp">⬇ Export CSV</button> <button class="btn y" id="suCls">Close</button></div></div>`;
   m.onclick=ev=>{ if(ev.target===m) m.classList.add("hidden"); }; $("#suCls").onclick=()=>m.classList.add("hidden");
   $("#suExp").onclick=()=>exportSurveyor(uid);
+  if(ROLE==="admin"){ const tg=$("#suTog"); if(tg) tg.onclick=async()=>{ const want=!DISABLED[uid]; tg.disabled=true; tg.textContent="…";
+    try{ await httpsCallable(functions,"setUserDisabled")({uid,disabled:want}); DISABLED[uid]=want; openSurveyor(uid); }
+    catch(e){ alert("Could not change login: "+((e&&e.message)||e)); openSurveyor(uid); } }; }
 }
 
 // Admin: export one field user's full data (recces + expenses) as a CSV the admin can keep.

@@ -5,6 +5,7 @@
  * Needs (one-time): Blaze plan + a Gmail App Password. See SETUP.md.
  */
 const { onSchedule } = require("firebase-functions/v2/scheduler");
+const { onCall, HttpsError } = require("firebase-functions/v2/https");
 const { defineSecret } = require("firebase-functions/params");
 const admin = require("firebase-admin");
 const nodemailer = require("nodemailer");
@@ -78,3 +79,28 @@ exports.weeklyReport = onSchedule(
     console.log("Weekly report sent to", recipients);
   }
 );
+
+// Admin/manager-only: enable or disable a field user's login (Firebase Auth).
+// Called from the dashboard surveyor modal. Mirrors the state to config/disabled
+// so the dashboard can show it without an Auth list call.
+exports.setUserDisabled = onCall(async (req) => {
+  const email = req.auth && req.auth.token && req.auth.token.email;
+  if (!email) throw new HttpsError("unauthenticated", "Sign in required.");
+  let allowed = ADMINS.includes(email);
+  if (!allowed) {
+    try {
+      const acc = await db.doc("config/access").get();
+      const managers = (acc.exists && acc.data().managers) || [];
+      allowed = managers.includes(email);
+    } catch (e) { /* ignore */ }
+  }
+  if (!allowed) throw new HttpsError("permission-denied", "Admins/managers only.");
+  const uid = req.data && req.data.uid;
+  const disabled = req.data && req.data.disabled;
+  if (!uid || typeof disabled !== "boolean") {
+    throw new HttpsError("invalid-argument", "uid and disabled (boolean) are required.");
+  }
+  await admin.auth().updateUser(uid, { disabled });
+  await db.doc("config/disabled").set({ [uid]: disabled }, { merge: true });
+  return { uid, disabled };
+});

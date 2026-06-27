@@ -1015,8 +1015,10 @@ function vehicleForm(existing){
   const base=existing||{};
   const _dfltMI=FLEET_DEFAULT_MAINT.map(([n,k])=>({name:n,intervalKm:k,lastKm:0}));
   const _haveMI=new Set((base.maintItems||[]).map(mi=>(mi.name||"").toLowerCase()));
+  // DEF (AdBlue) is opt-in per vehicle via its own toggle, so keep it out of the standard interval list.
+  const _defMI=(base.maintItems||[]).find(mi=>(mi.name||"").toLowerCase()==="def");
   // Merge: keep the vehicle's own items, append any default items it's missing (so existing vehicles gain new ones like the filters).
-  const items=((base.maintItems&&base.maintItems.length)?base.maintItems.slice():[]).concat(_dfltMI.filter(d=>!_haveMI.has(d.name.toLowerCase())));
+  const items=(((base.maintItems&&base.maintItems.length)?base.maintItems.slice():[]).concat(_dfltMI.filter(d=>!_haveMI.has(d.name.toLowerCase())))).filter(mi=>(mi.name||"").toLowerCase()!=="def");
   const dval=e=>e>0?new Date(e).toISOString().slice(0,10):"";
   try{ $("#modal").classList.add("hidden"); }catch(e){}
   $("#fleet").innerHTML=`
@@ -1044,6 +1046,10 @@ function vehicleForm(existing){
       <div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(160px,1fr))">
         ${items.map((mi,i)=>`<div><div style="font-size:11px;color:var(--soft);margin-bottom:3px">${esc(mi.name)} every</div><input type="number" class="fIv suInp" data-i="${i}" value="${mi.intervalKm||""}"></div>`).join("")}
       </div>
+      <div style="margin-top:16px;display:flex;align-items:center;gap:14px;flex-wrap:wrap;border-top:1px solid var(--line);padding-top:14px">
+        <label style="display:inline-flex;align-items:center;gap:7px;font-size:13.5px;cursor:pointer"><input type="checkbox" id="fDef" ${_defMI?"checked":""}> Uses DEF (AdBlue)</label>
+        <div id="fDefWrap" style="align-items:center;gap:8px;${_defMI?"display:flex":"display:none"}"><span style="font-size:11px;color:var(--soft)">DEF refill every (km)</span><input type="number" id="fDefKm" class="suInp" style="width:140px" value="${_defMI?(_defMI.intervalKm||""):8000}"></div>
+      </div>
       <div class="suLbl" style="margin-top:18px">Documents</div>
       <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px">
         <div><div style="font-size:11px;color:var(--soft);margin-bottom:3px">Insurance</div><input type="date" id="fIns" class="suInp" value="${dval(base.insuranceExpiry)}"></div>
@@ -1055,6 +1061,7 @@ function vehicleForm(existing){
   $("#vBack").onclick=()=>renderFleet();
   $("#fCancel").onclick=()=>renderFleet();
   $("#fType").onchange=()=>{ const fw=$("#fFitWrap"); if(fw) fw.style.display=typeNeedsFitness($("#fType").value)?"":"none"; };
+  $("#fDef").onchange=()=>{ const w=$("#fDefWrap"); if(w) w.style.display=$("#fDef").checked?"flex":"none"; };
   $("#fSave").onclick=async()=>{
     const number=$("#fNum").value.trim().toUpperCase().replace(/\s+/g,""), name=$("#fName").value.trim();
     if(!number){ alert("Enter the vehicle number."); return; }
@@ -1063,6 +1070,7 @@ function vehicleForm(existing){
     const dms=id=>{ const x=$("#"+id).value; return x?new Date(x+"T00:00:00").getTime():0; };
     const newItems=items.map(mi=>({name:mi.name,intervalKm:mi.intervalKm||0,lastKm:mi.lastKm||0}));
     document.querySelectorAll(".fIv").forEach(inp=>{ const i=+inp.dataset.i; if(newItems[i]) newItems[i].intervalKm=parseInt(inp.value)||0; });
+    if($("#fDef").checked) newItems.push({name:"DEF",intervalKm:parseInt($("#fDefKm").value)||8000,lastKm:_defMI?(_defMI.lastKm||0):0});
     const id=existing?existing.id:fleetRid();
     const payload={ number, name, make:$("#fMake").value.trim(), model:$("#fModel").value.trim(), year:$("#fYear").value||"",
       chassis:$("#fChassis").value.trim().toUpperCase(), engine:$("#fEngine").value.trim().toUpperCase(),

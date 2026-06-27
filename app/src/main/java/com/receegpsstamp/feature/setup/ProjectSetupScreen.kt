@@ -40,6 +40,7 @@ import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -306,12 +307,31 @@ fun ProjectSetupScreen(
 
             SectionHeader("WORK MODE")
             val setupInstalls = installs.filter { it.distributorId == (selectedDistributor?.id ?: "_") }
+            // Stage gates the toggle: user can only pick the phase the project is actually in.
+            // Recce phase: stage "" or "Recce" — Installation tab locked (admin must approve recces first).
+            // Approval pending: stage "RecceDone" — neither active (awaiting admin).
+            // Installation phase: stage "Installation"/"InstallDone" — Recce tab locked (admin only).
+            val curStage = selectedDistributor?.stage ?: ""
+            val recceAllowed = curStage == "" || curStage == "Recce"
+            val installAllowed = curStage == "Installation" || curStage == "InstallDone"
+            // Auto-snap workMode to the allowed phase if the current selection isn't allowed.
+            LaunchedEffect(curStage, selectedDistributor?.id) {
+                if (workMode == "install" && !installAllowed) workMode = "recce"
+                if (workMode == "recce" && !recceAllowed && installAllowed) workMode = "install"
+            }
             Row(
                 Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).background(NeutralSurfaceV).padding(3.dp),
                 horizontalArrangement = Arrangement.spacedBy(3.dp),
             ) {
-                SegTab("Recce", workMode == "recce", Modifier.weight(1f)) { workMode = "recce" }
-                SegTab("Installation · ${setupInstalls.size}", workMode == "install", Modifier.weight(1f)) { workMode = "install" }
+                LockableSegTab("Recce", workMode == "recce", enabled = recceAllowed, Modifier.weight(1f), lockedHint = "Project is in Installation phase — only admin can switch back to Recce") { if (recceAllowed) workMode = "recce" }
+                LockableSegTab("Installation · ${setupInstalls.size}", workMode == "install", enabled = installAllowed, Modifier.weight(1f), lockedHint = if (curStage == "RecceDone") "Recce done — waiting for admin approval. Installation will unlock automatically." else "Installation unlocks after admin approves the recces.") { if (installAllowed) workMode = "install" }
+            }
+            if (curStage == "RecceDone") {
+                Text(
+                    "⏳ Awaiting admin approval — Installation tab unlocks once admin approves the recces (web dashboard).",
+                    fontSize = 11.5.sp, color = AppYellowDark, fontWeight = FontWeight.Medium,
+                    modifier = Modifier.padding(horizontal = 4.dp, vertical = 6.dp),
+                )
             }
 
             ChipSection("Creatives", RgsIcons.Edit, creatives.size, creativesOpen, { creativesOpen = !creativesOpen }) {
@@ -383,16 +403,25 @@ private fun CurrentProjectCard(companyName: String, distributorName: String, cre
     }
 }
 
-// Quick stage progression: 1-tap to mark Recce/Installation done — admin web sees status update.
+// Project lifecycle action — stage-aware, enforces the sequence:
+// Recce → user marks Recce Done → ⏳ awaiting admin approval → admin advances to Installation → user marks Install Done.
+// User cannot skip Approval (only admin can advance from RecceDone to Installation, on the web dashboard).
 @Composable
 private fun StageActionRow(stage: String, onSetStage: (String) -> Unit) {
     var confirm by remember { mutableStateOf<String?>(null) }
     RgsCard(Modifier.fillMaxWidth().padding(top = 6.dp)) {
         when (stage) {
             "RecceDone" -> Row(verticalAlignment = Alignment.CenterVertically) {
+                // Pending state — no action for the field user. Admin must approve from web.
                 Column(Modifier.weight(1f)) {
-                    Text("✓ Recce phase complete", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = AppYellowDark)
-                    Text("Admin sees this status. Mark installation done when the project is fully installed.", fontSize = 11.sp, color = NeutralTextSoft)
+                    Text("⏳ Awaiting admin approval", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = AppYellowDark)
+                    Text("Recce marked done. Admin will review on the web dashboard and unlock Installation — please wait.", fontSize = 11.sp, color = NeutralTextSoft)
+                }
+            }
+            "Installation" -> Row(verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    Text("🛠 Installation in progress", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = Color(0xFF0858A3))
+                    Text("Admin approved the recces. When all media is installed, mark installation done.", fontSize = 11.sp, color = NeutralTextSoft)
                 }
                 Spacer(Modifier.width(10.dp))
                 Box(Modifier.clip(RoundedCornerShape(9.dp)).background(BrandGradient).clickable { confirm = "InstallDone" }.padding(horizontal = 14.dp, vertical = 9.dp)) {
@@ -402,17 +431,14 @@ private fun StageActionRow(stage: String, onSetStage: (String) -> Unit) {
             "InstallDone" -> Row(verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {
                     Text("🏁 Project complete", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = Color(0xFF1B873F))
-                    Text("All done. Reopen if there's more work to do.", fontSize = 11.sp, color = NeutralTextSoft)
-                }
-                Spacer(Modifier.width(10.dp))
-                Box(Modifier.clip(RoundedCornerShape(9.dp)).background(NeutralSurfaceV).clickable { confirm = "" }.padding(horizontal = 14.dp, vertical = 9.dp)) {
-                    Text("↻ Reopen", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = NeutralTextSoft)
+                    Text("All done. Admin will wrap up and unlink the project from your app.", fontSize = 11.sp, color = NeutralTextSoft)
                 }
             }
             else -> Row(verticalAlignment = Alignment.CenterVertically) {
+                // Default — Recce phase ("" or "Recce")
                 Column(Modifier.weight(1f)) {
                     Text("📋 Recce in progress", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = NeutralText)
-                    Text("Once you've covered all shops for this project, mark recce done — admin's dashboard updates.", fontSize = 11.sp, color = NeutralTextSoft)
+                    Text("Once you've covered all shops for this project, mark recce done — admin will then review & approve.", fontSize = 11.sp, color = NeutralTextSoft)
                 }
                 Spacer(Modifier.width(10.dp))
                 Box(Modifier.clip(RoundedCornerShape(9.dp)).background(BrandGradient).clickable { confirm = "RecceDone" }.padding(horizontal = 14.dp, vertical = 9.dp)) {
@@ -423,8 +449,8 @@ private fun StageActionRow(stage: String, onSetStage: (String) -> Unit) {
     }
     confirm?.let { target ->
         val pair: Pair<String, String> = when (target) {
-            "RecceDone" -> "Mark Recce Done?" to "This tells admin the recce phase is complete for this project. You can still keep adding recces if needed — admin will see the status update on their dashboard."
-            "InstallDone" -> "Mark Installation Done?" to "This marks the whole project complete. Admin's dashboard will show ✓ Installation Done."
+            "RecceDone" -> "Mark Recce Done?" to "This tells admin the recce phase is complete. Admin will review your recces and approve them — Installation will then unlock automatically. You can still add more recces in the meantime."
+            "InstallDone" -> "Mark Installation Done?" to "This marks the whole project complete. Admin's dashboard will show ✓ Installation Done — they'll wrap up from there."
             else -> "Reopen project?" to "This clears the status back to active so the project shows as ongoing again."
         }
         val title = pair.first; val body = pair.second
@@ -786,6 +812,29 @@ private fun SegTab(label: String, sel: Boolean, mod: Modifier, onClick: () -> Un
         contentAlignment = Alignment.Center,
     ) {
         Text(label, fontSize = 12.5.sp, fontWeight = FontWeight.Bold, color = if (sel) NeutralText else NeutralTextSoft)
+    }
+}
+
+// SegTab that respects an enabled flag — locked tabs are greyed and show a toast-style hint on tap.
+@Composable
+private fun LockableSegTab(label: String, sel: Boolean, enabled: Boolean, mod: Modifier, lockedHint: String, onClick: () -> Unit) {
+    val ctx = androidx.compose.ui.platform.LocalContext.current
+    val bg = if (sel && enabled) NeutralSurface else Color.Transparent
+    val fg = when {
+        sel && enabled -> NeutralText
+        !enabled -> NeutralTextSoft.copy(alpha = 0.45f)
+        else -> NeutralTextSoft
+    }
+    val lockIcon = if (!enabled) " 🔒" else ""
+    Box(
+        mod.clip(RoundedCornerShape(8.dp)).background(bg)
+            .clickable {
+                if (enabled) onClick()
+                else android.widget.Toast.makeText(ctx, lockedHint, android.widget.Toast.LENGTH_LONG).show()
+            }.padding(vertical = 8.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text("$label$lockIcon", fontSize = 12.5.sp, fontWeight = FontWeight.Bold, color = fg)
     }
 }
 

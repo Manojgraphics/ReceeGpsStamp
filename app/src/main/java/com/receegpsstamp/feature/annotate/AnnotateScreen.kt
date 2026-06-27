@@ -562,7 +562,7 @@ fun AnnotateScreen(photoPath: String?, saveCleanCopy: Boolean = false, onDone: (
                         val m = android.graphics.Matrix().apply { postRotate(90f) }
                         val out = Bitmap.createBitmap(src, 0, 0, src.width, src.height, m, true)
                         if (photoPath != null) {
-                            FileOutputStream(photoPath).use { out.compress(Bitmap.CompressFormat.JPEG, 95, it) }
+                            writeJpegAtomic(photoPath, out)
                             mirrorEditToGallery(context, File(photoPath))
                         }
                         out
@@ -590,7 +590,7 @@ fun AnnotateScreen(photoPath: String?, saveCleanCopy: Boolean = false, onDone: (
                                 val h = ((r.bottom - r.top) * src.height).toInt().coerceAtLeast(1).coerceAtMost(src.height - y)
                                 val out = Bitmap.createBitmap(src, x, y, w, h)
                                 if (photoPath != null) {
-                                    FileOutputStream(photoPath).use { out.compress(Bitmap.CompressFormat.JPEG, 95, it) }
+                                    writeJpegAtomic(photoPath, out)
                                     mirrorEditToGallery(context, File(photoPath))
                                 }
                                 out
@@ -1386,6 +1386,19 @@ private fun cornerHit(m: Mark, screen: Offset, toScreen: (Offset) -> Offset): In
     return -1
 }
 
+// Crash-safe JPEG write: temp → fsync → atomic rename, so a mid-write kill never leaves a
+// truncated/zero photo — the original survives until the new file is fully written.
+private fun writeJpegAtomic(path: String, bmp: Bitmap, quality: Int = 95) {
+    val tmp = File("$path.tmp")
+    FileOutputStream(tmp).use { fos ->
+        bmp.compress(Bitmap.CompressFormat.JPEG, quality, fos)
+        fos.flush()
+        runCatching { fos.fd.sync() }   // best-effort durability
+    }
+    val dest = File(path)
+    if (!tmp.renameTo(dest)) { tmp.copyTo(dest, overwrite = true); tmp.delete() }
+}
+
 // ── Flatten marks onto the full-res bitmap, overwrite the file, optionally share ──
 private suspend fun flatten(
     path: String?, marks: List<Mark>, share: Boolean, context: android.content.Context,
@@ -1487,7 +1500,7 @@ private suspend fun flatten(
                     Tool.Select -> {}
                 }
             }
-            FileOutputStream(path).use { bmp.compress(Bitmap.CompressFormat.JPEG, 95, it) }
+            writeJpegAtomic(path, bmp)
             mirrorEditToGallery(context, File(path))   // keep the phone-gallery copy in sync with the edit
             if (share) {
                 val uri = FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", File(path))

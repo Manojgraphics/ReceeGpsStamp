@@ -305,16 +305,20 @@ class FirestoreSync @Inject constructor(
         var changed = false
         for (path in allPhotoPaths(localStore.db.value)) {
             val rel = relPath(path) ?: continue
-            if (rel in uploaded) continue
             val file = File(path)
             if (!file.exists()) continue
+            // Key on last-modified so an edited photo (annotate / rotate / crop) re-uploads.
+            val key = "$rel|${file.lastModified()}"
+            if (key in uploaded) continue
+            // Legacy plain-rel key from older builds → already uploaded; migrate silently (no re-upload).
+            if (rel in uploaded) { uploaded.remove(rel); uploaded.add(key); changed = true; continue }
             try {
                 // Already-small files (bill photos ~200 KB, UPI screenshots) upload as-is; larger
                 // recce photos get re-compressed (max 2560px, Q85) to keep cloud storage small.
                 val upload = if (file.length() <= 500_000L) file else (compressForUpload(file) ?: file)
                 storage.reference.child("users/$uid/files/$rel").putFile(Uri.fromFile(upload)).await()
                 if (upload !== file) upload.delete()
-                uploaded.add(rel); changed = true
+                uploaded.add(key); changed = true
             } catch (_: Exception) { /* leave untracked → retried on the next backup */ }
         }
         if (changed) saveUploaded(uploaded)

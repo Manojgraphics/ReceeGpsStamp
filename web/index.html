@@ -143,6 +143,7 @@
       <div class="nav-section">Main</div>
       <div class="nav-item on" data-tab="overview"><span class="nav-ic"><i class="ti ti-layout-dashboard"></i></span>Dashboard</div>
       <div class="nav-item" data-tab="leaderboard"><span class="nav-ic"><i class="ti ti-trophy"></i></span>Leaderboard</div>
+      <div class="nav-item" data-tab="team"><span class="nav-ic"><i class="ti ti-users-group"></i></span>Field Team</div>
       <div class="nav-item" data-tab="projects"><span class="nav-ic"><i class="ti ti-building-store"></i></span>Projects</div>
       <div class="nav-section">Insights</div>
       <div class="nav-item" data-tab="expenses"><span class="nav-ic"><i class="ti ti-wallet"></i></span>Expenses</div>
@@ -158,6 +159,7 @@
       <div id="status" class="loading">Loading team data…</div>
       <div id="overview" class="tabpane"></div>
     <div id="leaderboard" class="tabpane hidden"></div>
+    <div id="team" class="tabpane hidden"></div>
     <div id="projects" class="tabpane hidden"></div>
     <div id="expenses" class="tabpane hidden"></div>
     <div id="analytics" class="tabpane hidden"></div>
@@ -238,7 +240,7 @@ function renderRangeBar(){
     setRange(from,to,(f||"…")+" → "+(t||"…")); };
 }
 function rerenderActive(){ const on=document.querySelector(".nav-item.on"); if(!on) return; const t=on.dataset.tab;
-  ({overview:renderOverview,leaderboard:renderLeaderboard,projects:renderProjects,expenses:renderExpenses,analytics:renderAnalytics,map:renderMap,gallery:renderGallery,fleet:renderFleet}[t]||(()=>{}))(); }
+  ({overview:renderOverview,leaderboard:renderLeaderboard,team:renderTeam,projects:renderProjects,expenses:renderExpenses,analytics:renderAnalytics,map:renderMap,gallery:renderGallery,fleet:renderFleet}[t]||(()=>{}))(); }
 
 $("#signin").onclick = () => signInWithPopup(auth, new GoogleAuthProvider()).catch(e=>$("#loginmsg").textContent="Sign-in failed: "+(e.message||e.code||e));
 $("#signout").onclick = () => signOut(auth);
@@ -311,6 +313,7 @@ document.querySelectorAll(".nav-item[data-tab]").forEach(t => t.onclick = () => 
   if(t.dataset.tab==="map") renderMap();
   if(t.dataset.tab==="gallery"){ _galProj=null; renderGallery(); }
   if(t.dataset.tab==="fleet") renderFleet();
+  if(t.dataset.tab==="team") renderTeam();
 });
 
 async function load(){
@@ -777,6 +780,33 @@ function openLedger(uid){
   </div>`;
   m.onclick=ev=>{ if(ev.target===m) m.classList.add("hidden"); };
   $("#ledClose").onclick=()=>m.classList.add("hidden");
+}
+
+// ── Field Team — roster of field users + per-user ledger (khata) ──
+function renderTeam(){
+  const surs=fSurveyors().slice().sort((a,b)=>(b.lastActive||0)-(a.lastActive||0));
+  const now=Date.now();
+  const lastTxt=ms=>{ if(!ms) return '<span style="color:var(--soft)">never</span>'; const d=Math.floor((now-ms)/86400000); const s=d<=0?"today":d===1?"1 day ago":d+" days ago"; return `<span style="color:${d>=3?'var(--danger)':'var(--soft)'}">${s}</span>`; };
+  const ms2=(l,v,c)=>`<div><div style="font-size:13.5px;font-weight:800;${c?'color:'+c:''}">${v}</div><div style="font-size:9px;color:var(--soft)">${l}</div></div>`;
+  $("#team").innerHTML=`
+    <div class="sec">👷 FIELD TEAM · ${surs.length}${RANGE.label!=="All time"?" · "+esc(RANGE.label):""}</div>
+    <div class="filters" style="margin-bottom:10px"><input type="text" id="tmSearch" placeholder="Search name / mobile…" style="flex:1;max-width:300px"></div>
+    <div id="tmList"></div>`;
+  const draw=()=>{
+    const q=($("#tmSearch").value||"").trim().toLowerCase();
+    const list=surs.filter(s=>!q||(s.name||"").toLowerCase().includes(q)||(s.mobile||"").includes(q));
+    $("#tmList").innerHTML = list.length ? `<div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(280px,1fr))">`+list.map(s=>{ const bal=(s.advance||0)-(s.spent||0);
+      return `<div class="card">
+        <div style="display:flex;align-items:center;gap:8px"><b style="font-size:14.5px;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(s.name)}</b>${s.mobile?`<a href="tel:${esc(s.mobile)}" style="color:var(--brand-d);font-size:12px;text-decoration:none;white-space:nowrap">📞 ${esc(s.mobile)}</a>`:""}</div>
+        <div style="font-size:11.5px;color:var(--soft);margin-top:3px">Last active: ${lastTxt(s.lastActive)} · ${s.projects||0} projects · ${s.stores||0} shops</div>
+        <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-top:9px;text-align:center">${ms2("Surveyed",s.surveyed||0)}${ms2("Interested",s.interested||0)}${ms2("Advance",money(s.advance||0))}${ms2(bal>=0?"Balance":"Over",money(Math.abs(bal)),bal<0?"var(--danger)":"")}</div>
+        <div style="display:flex;gap:6px;margin-top:10px"><button class="btn y tmLed" data-uid="${esc(s.uid)}" style="flex:1;padding:6px;font-size:11.5px">🧾 Ledger</button><button class="btn tmDet" data-uid="${esc(s.uid)}" style="flex:1;padding:6px;font-size:11.5px">Details</button></div>
+      </div>`; }).join("")+`</div>`
+      : `<div class="card loading">No field users${q?" match.":" yet."}</div>`;
+    $("#tmList").querySelectorAll(".tmLed").forEach(b=>b.onclick=()=>openLedger(b.dataset.uid));
+    $("#tmList").querySelectorAll(".tmDet").forEach(b=>b.onclick=()=>openSurveyor(b.dataset.uid));
+  };
+  $("#tmSearch").oninput=draw; draw();
 }
 
 // ── Managers (admin only) ──

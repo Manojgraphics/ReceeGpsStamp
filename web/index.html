@@ -116,6 +116,15 @@
     table th,table td{padding:8px 9px;font-size:12px}
     /* Stat blocks readability */
     .stat .v{font-size:18px}
+    /* Maintenance table → card layout on phones (vehicle / item / progress / status / actions stack) */
+    .maintTbl thead,.maintTbl tr>th{display:none}
+    .maintTbl,.maintTbl tbody,.maintTbl tr,.maintTbl td{display:block;width:100%;box-sizing:border-box}
+    .maintTbl tr{border:1px solid var(--line);border-radius:11px;padding:11px 13px;margin-bottom:10px;background:var(--card)}
+    .maintTbl td{padding:5px 0;border:none}
+    .maintTbl td[data-label="Vehicle"]{font-size:14px;font-weight:800;border-bottom:1px dashed var(--line);padding-bottom:7px;margin-bottom:4px}
+    .maintTbl td[data-label]::before{content:attr(data-label);display:block;font-size:9.5px;font-weight:800;letter-spacing:.5px;color:var(--soft);margin-bottom:3px}
+    .maintTbl td[data-label="Vehicle"]::before{display:none}
+    .maintTbl td[data-label="Action"]{margin-top:5px;padding-top:8px;border-top:1px dashed var(--line)}
   }
 </style>
 </head>
@@ -1228,21 +1237,21 @@ function renderFleetMaintenance(V){
       <div class="card" style="padding:13px"><div style="font-size:24px;font-weight:800;color:var(--soft)">${counts.notset}</div><div style="font-size:11px;letter-spacing:.4px;color:var(--soft);font-weight:700">NOT SET</div></div>
     </div>
     <div class="filters" id="mfTabs" style="gap:7px;margin-bottom:12px">${tab("all","All",all.length)}${tab("due","Needs action",counts.overdue+counts.due)}${tab("service","🔧 Service",all.filter(o=>o.cat==="Service").length)}${tab("repair","🛠️ Repair",all.filter(o=>o.cat==="Repair").length)}</div>
-    ${filtered.length?`<div class="tablewrap"><table>
-      <tr><th>Vehicle</th><th>Item</th><th>Type</th><th>Interval</th><th>Last @</th><th>Current km</th><th>Status</th><th></th></tr>
-      ${filtered.map(o=>`<tr><td class="wrap"><b>${esc(o.v.number||o.v.name||"Vehicle")}</b>${o.v.model?`<br><span style="color:var(--soft);font-size:11px">${esc(o.v.model)}</span>`:""}</td>
-        <td><b>${esc(normMaintName(o.mi.name))}</b></td>
-        <td><span style="font-size:11px;font-weight:700;color:${o.cat==="Service"?"var(--brand-d)":"#8B5E3C"}">${o.cat==="Service"?"🔧 Service":"🛠️ Repair"}</span></td>
-        <td>${o.mi.intervalKm?(o.mi.intervalKm.toLocaleString("en-IN")+" km"):"—"}</td>
-        <td>${o.mi.lastKm?(o.mi.lastKm.toLocaleString("en-IN")+" km"):"—"}</td>
-        <td>${(o.v.currentKm||0).toLocaleString("en-IN")} km</td>
-        <td>${statusCell(o)}</td>
-        <td><button class="btn mfLog" data-vid="${esc(o.v.id)}" data-item="${esc(o.mi.name)}" style="padding:4px 10px;font-size:11.5px" title="Log a service / repair for this item">+ Log</button></td>
-      </tr>`).join("")}
+    ${filtered.length?`<div class="tablewrap"><table class="maintTbl">
+      <tr><th>Vehicle</th><th>Item</th><th>Used / Interval</th><th>Status</th><th></th></tr>
+      ${filtered.map(o=>{ const cur=o.v.currentKm||0, last=o.mi.lastKm||0, iv=o.mi.intervalKm||0; const used=iv>0?(last>0?Math.max(0,cur-last):cur):0; const pct=iv>0?Math.round(used*100/iv):0; const bw=Math.min(100,pct); const bc=pct>=100?"var(--danger)":pct>=85?"var(--brand-d)":"#1B873F";
+        return `<tr class="mtRow" data-vid="${esc(o.v.id)}" data-item="${esc(normMaintName(o.mi.name))}">
+        <td data-label="Vehicle" class="wrap"><b>${esc(o.v.number||o.v.name||"Vehicle")}</b>${o.v.model?`<br><span style="color:var(--soft);font-size:11px">${esc(o.v.model)}</span>`:""}</td>
+        <td data-label="Item"><span style="font-size:11px;font-weight:700;color:${o.cat==="Service"?"var(--brand-d)":"#8B5E3C"}">${o.cat==="Service"?"🔧":"🛠️"}</span> <b>${esc(normMaintName(o.mi.name))}</b></td>
+        <td data-label="Progress" style="min-width:180px">${iv>0?`<div style="display:flex;align-items:center;gap:7px"><div style="flex:1;height:7px;border-radius:50px;background:#EAEAEA;overflow:hidden"><div style="width:${bw}%;height:100%;background:${bc}"></div></div><span style="font-size:11px;color:var(--soft);font-weight:700;min-width:34px;text-align:right">${pct}%</span></div><div style="font-size:10.5px;color:var(--soft);margin-top:3px">${used.toLocaleString("en-IN")} / ${iv.toLocaleString("en-IN")} km${last>0?` · last @ ${last.toLocaleString("en-IN")}`:" · never logged"}</div>`:`<span style="color:var(--soft);font-size:12px">no interval set</span>`}</td>
+        <td data-label="Status">${statusCell(o)}</td>
+        <td data-label="Action" style="white-space:nowrap">${iv>0?`<button class="btn mfDone" data-vid="${esc(o.v.id)}" data-item="${esc(normMaintName(o.mi.name))}" style="padding:5px 11px;font-size:11.5px;background:#E8F5EC;color:#1B873F;border:none;font-weight:700" title="Quick mark done @ current km — no form">✓ Done</button> `:""}<button class="btn mfLog" data-vid="${esc(o.v.id)}" data-item="${esc(normMaintName(o.mi.name))}" style="padding:5px 10px;font-size:11.5px" title="Open service form pre-filled with this item">📝 Log</button></td>
+      </tr>`; }).join("")}
     </table></div>`:`<div class="card loading">No maintenance items.</div>`}`;
   document.querySelectorAll("#fleet .fvTab").forEach(b=>b.onclick=()=>{ _fleetView=b.dataset.v; renderFleet(); });
   document.querySelectorAll("#fleet .mfTab").forEach(b=>b.onclick=()=>{ _maintFilter=b.dataset.f; renderFleet(); });
-  document.querySelectorAll("#fleet .mfLog").forEach(b=>b.onclick=()=>{ const v=V.find(x=>x.id===b.dataset.vid); if(v) serviceForm(v); });
+  document.querySelectorAll("#fleet .mfLog").forEach(b=>b.onclick=()=>{ const v=V.find(x=>x.id===b.dataset.vid); if(v) serviceForm(v,null,b.dataset.item); });
+  document.querySelectorAll("#fleet .mfDone").forEach(b=>b.onclick=()=>{ const v=V.find(x=>x.id===b.dataset.vid); if(v) markMaintDone(v,b.dataset.item); });
   $("#mfXls").onclick=()=>{ const H=["Vehicle","Item","Type","Interval (km)","Last @ km","Current km","Remaining km","Status"]; const rows=filtered.map(o=>[o.v.number||o.v.name||"",o.mi.name,o.cat,o.mi.intervalKm||"",o.mi.lastKm||"",o.v.currentKm||0,o.status==="overdue"?(-o.rem):(o.status==="due"||o.status==="ok"?o.rem:""),o.status==="overdue"?"Overdue":o.status==="due"?"Due soon":o.status==="ok"?"OK":"Not set"]); xlsx("fleet_maintenance",H,rows); };
 }
 function renderFleetServices(V){
@@ -1372,7 +1381,12 @@ function openVehicle(v){
   const items=(v.maintItems||[]).map(mi=>({...mi,name:normMaintName(mi.name)}));
   const maintHtml=`
     <div style="display:flex;align-items:center;margin-bottom:10px"><b style="font-size:14.5px">Maintenance status</b><span style="margin-left:auto;font-size:12px;color:var(--soft)">@ ${km.toLocaleString("en-IN")} km</span></div>
-    ${["Service","Repair"].map(cat=>{ const rows=items.filter(mi=>maintCatOf(mi.name)===cat); if(!rows.length) return ""; return `<div style="font-size:11px;color:var(--brand-d);font-weight:800;margin:8px 0 4px;letter-spacing:.3px">${cat==="Service"?"🔧 SERVICE":"🛠️ REPAIR"}</div><div class="tablewrap"><table><tr><th>Item</th><th>Interval</th><th>Last @</th><th>Status</th></tr>${rows.map(mi=>`<tr><td><b>${esc(mi.name)}</b></td><td>${mi.intervalKm||"—"} km</td><td>${mi.lastKm||"—"}</td><td>${dueTxt(mi)}</td></tr>`).join("")}</table></div>`; }).join("")||`<div class="card loading">No items.</div>`}
+    ${["Service","Repair"].map(cat=>{ const rows=items.filter(mi=>maintCatOf(mi.name)===cat); if(!rows.length) return ""; return `<div style="font-size:11px;color:var(--brand-d);font-weight:800;margin:8px 0 4px;letter-spacing:.3px">${cat==="Service"?"🔧 SERVICE":"🛠️ REPAIR"}</div><div class="tablewrap"><table class="maintTbl"><tr><th>Item</th><th>Used / Interval</th><th>Status</th><th></th></tr>${rows.map(mi=>{ const iv=mi.intervalKm||0, last=mi.lastKm||0, used=iv>0?(last>0?Math.max(0,km-last):km):0, pct=iv>0?Math.round(used*100/iv):0, bw=Math.min(100,pct), bc=pct>=100?"var(--danger)":pct>=85?"var(--brand-d)":"#1B873F";
+      return `<tr><td data-label="Item"><b>${esc(mi.name)}</b></td>
+        <td data-label="Progress" style="min-width:170px">${iv>0?`<div style="display:flex;align-items:center;gap:7px"><div style="flex:1;height:7px;border-radius:50px;background:#EAEAEA;overflow:hidden"><div style="width:${bw}%;height:100%;background:${bc}"></div></div><span style="font-size:11px;color:var(--soft);font-weight:700;min-width:34px;text-align:right">${pct}%</span></div><div style="font-size:10.5px;color:var(--soft);margin-top:3px">${used.toLocaleString("en-IN")} / ${iv.toLocaleString("en-IN")} km${last>0?` · last @ ${last.toLocaleString("en-IN")}`:" · never"}</div>`:`<span style="color:var(--soft);font-size:12px">no interval set</span>`}</td>
+        <td data-label="Status">${dueTxt(mi)}</td>
+        <td data-label="Action" style="white-space:nowrap">${iv>0?`<button class="btn vMDone" data-item="${esc(mi.name)}" style="padding:4px 10px;font-size:11.5px;background:#E8F5EC;color:#1B873F;border:none;font-weight:700" title="Quick mark done @ ${km.toLocaleString("en-IN")} km">✓ Done</button> `:""}<button class="btn vMLog" data-item="${esc(mi.name)}" style="padding:4px 9px;font-size:11.5px" title="Open service form pre-filled">📝 Log</button></td>
+      </tr>`; }).join("")}</table></div>`; }).join("")||`<div class="card loading">No items.</div>`}
     <div class="sec">EDIT INTERVALS</div>
     <div style="font-size:11.5px;color:var(--soft);margin-bottom:8px">Set the km interval per item for this vehicle.</div>
     ${["Service","Repair"].map(cat=>{ const g=items.map((mi,i)=>({mi,i})).filter(o=>maintCatOf(o.mi.name)===cat); if(!g.length) return ""; return `<div style="font-size:11px;color:var(--brand-d);font-weight:800;margin:10px 0 4px;letter-spacing:.3px">${cat==="Service"?"🔧 SERVICE":"🛠️ REPAIR"}</div><div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(160px,1fr))">${g.map(({mi,i})=>`<div><div style="font-size:11px;color:var(--soft);margin-bottom:3px">${esc(mi.name)} every</div><div style="display:flex;gap:5px"><input type="number" class="mIv" data-i="${i}" value="${mi.intervalKm||""}" style="flex:1;padding:7px 9px;border:1px solid var(--line);border-radius:8px;font-size:12.5px"><button class="mIRm" data-i="${i}" title="Remove item" style="background:#FBEAE5;color:var(--danger);border:none;border-radius:8px;padding:0 9px;cursor:pointer">✕</button></div></div>`).join("")}</div>`; }).join("")}
@@ -1405,6 +1419,8 @@ function openVehicle(v){
   m.querySelectorAll(".svBill").forEach(b=>b.onclick=async()=>{ try{ const u=await getDownloadURL(ref(storage,b.dataset.p)); window.open(u,"_blank"); }catch(e){ alert("Couldn't open bill: "+(e.message||e)); } });
   // Maintenance tab wiring
   if(_vTab==="maint"){
+    m.querySelectorAll(".vMDone").forEach(b=>b.onclick=()=>markMaintDone(v,b.dataset.item));
+    m.querySelectorAll(".vMLog").forEach(b=>b.onclick=()=>serviceForm(v,null,b.dataset.item));
     m.querySelectorAll(".mIRm").forEach(b=>b.onclick=()=>{ const i=+b.dataset.i; if(!confirm(`Remove "${items[i].name}" from this vehicle's maintenance list?`)) return; items.splice(i,1); v.maintItems=items; saveMaintItems(v,items); });
     $("#mAddItem").onclick=()=>{ const nm=($("#mNewName").value||"").trim(); const ikm=parseInt($("#mNewKm").value)||0; const cat=$("#mNewCat").value; if(!nm){ alert("Enter item name"); return; } if(!ikm){ alert("Enter interval km"); return; } items.push({name:nm,intervalKm:ikm,lastKm:0}); MAINT_CAT[nm.toLowerCase()]=cat; v.maintItems=items; saveMaintItems(v,items); };
     $("#mSave").onclick=()=>{ document.querySelectorAll("#modal .mIv").forEach(inp=>{ const i=+inp.dataset.i; if(items[i]) items[i].intervalKm=parseInt(inp.value)||0; }); v.maintItems=items; saveMaintItems(v,items); };
@@ -1499,8 +1515,22 @@ function fuelForm(v, edit){
     const logs=edit?(v.fuelLogs||[]).map(x=>x.id===edit.id?log:x):[...(v.fuelLogs||[]),log];
     try{ await setDoc(doc(db,"fleet",v.id),{fuelLogs:logs,currentKm:Math.max(odo,v.currentKm||0),updatedAt:Date.now()},{merge:true}); logAudit("vehicle",`${edit?"Edited fuel":"Fuel"} ${odo}km for ${v.name||v.number}`); v.fuelLogs=logs; v.currentKm=Math.max(odo,v.currentKm||0); openVehicle(v); renderFleet(); }catch(e){ alert(e.message||e); } };
 }
-function serviceForm(v, edit){
-  const editTypes=edit?new Set((edit.type||"").split(",").map(s=>s.trim().toLowerCase()).filter(Boolean)):new Set();
+// Quick-mark a single maintenance item done @ current km — no form, single Firestore write.
+async function markMaintDone(v, itemName){
+  if(!v||!itemName) return;
+  if(!confirm(`Mark "${itemName}" done for ${v.name||v.number} @ ${(v.currentKm||0).toLocaleString("en-IN")} km?\n\nNo cost / garage details are logged — use 📝 Log for a full entry.`)) return;
+  const items=(v.maintItems||[]).map(mi=>(normMaintName(mi.name).toLowerCase()===itemName.toLowerCase()||(mi.name||"").toLowerCase()===itemName.toLowerCase())?{...mi,name:normMaintName(mi.name),lastKm:v.currentKm||0}:{...mi,name:normMaintName(mi.name)});
+  const log={id:fleetRid(),date:Date.now(),odometer:v.currentKm||0,type:itemName,amount:0,labour:0,garage:"",garagePhone:"",project:"",nextDue:0,billPhoto:"",note:"Quick mark · Maintenance tab"};
+  const logs=[...(v.serviceLogs||[]),log];
+  try{
+    await setDoc(doc(db,"fleet",v.id),{maintItems:items,serviceLogs:logs,updatedAt:Date.now()},{merge:true});
+    logAudit("vehicle",`Quick-marked ${itemName} done for ${v.name||v.number} @ ${v.currentKm||0} km`);
+    v.maintItems=items; v.serviceLogs=logs;
+    renderFleet();
+  }catch(e){ alert("Save failed: "+(e.message||e)); }
+}
+function serviceForm(v, edit, prePick){
+  const editTypes=edit?new Set((edit.type||"").split(",").map(s=>s.trim().toLowerCase()).filter(Boolean)):prePick?new Set([String(prePick).toLowerCase()]):new Set();
   const sd=edit?new Date(edit.date||Date.now()):new Date();
   const m=$("#modal"); m.classList.remove("hidden");
   m.innerHTML=`<div class="modalbox"><h3 style="margin:0 0 8px">${edit?"✏️ Edit service":"🔧 Add service"} — ${esc(v.name||v.number)}</h3>

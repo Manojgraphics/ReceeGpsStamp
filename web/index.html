@@ -1188,9 +1188,9 @@ async function renderFleet(){
   // Require ≥3 fuel logs per vehicle so noisy 2-fill records can't claim "best" — keep all data, just don't highlight low-confidence ones.
   const ecArr=V.map(v=>({v,ec:vehEconomy(v),fills:(v.fuelLogs||[]).length})).filter(o=>o.ec>0&&o.fills>=3).sort((a,b)=>b.ec-a.ec);
   const bestEc=ecArr[0];
-  // This-month aggregates (km + fuel + ₹/km) — fleet-wide totals are legitimate (sum/sum, not average-of-averages)
-  const mAgg=V.reduce((a,v)=>{ const m=vehMonth(v); a.km+=m.km; a.fuel+=m.fuel; a.lit+=m.litres; a.fills+=m.fills; return a; },{km:0,fuel:0,lit:0,fills:0});
-  const avgCpk=mAgg.km>0?mAgg.fuel/mAgg.km:0;
+  // This-month aggregates (km + fuel ₹ + service ₹ + ₹/km on total) — fleet-wide totals are legitimate (sum/sum, not average-of-averages)
+  const mAgg=V.reduce((a,v)=>{ const m=vehMonth(v); a.km+=m.km; a.fuel+=m.fuel; a.svc+=m.svc; a.lit+=m.litres; a.fills+=m.fills; return a; },{km:0,fuel:0,svc:0,lit:0,fills:0});
+  const avgCpk=mAgg.km>0?(mAgg.fuel+mAgg.svc)/mAgg.km:0;
   const allAlerts=[]; V.forEach(v=>vehAlerts(v).forEach(a=>allAlerts.push({v,a})));
   const expired=allAlerts.filter(o=>/EXPIRED|OVERDUE/.test(o.a)).length, due=allAlerts.length-expired;
   const kpi=(lbl,val,ic,sub,red)=>`<div class="card" style="padding:15px"><div style="display:flex;align-items:center;justify-content:space-between"><span style="font-size:11px;font-weight:800;letter-spacing:.4px;color:var(--soft)">${lbl}</span><span style="font-size:15px">${ic}</span></div><div style="font-size:28px;font-weight:800;margin-top:4px;color:${red?'var(--danger)':'var(--ink)'}">${val}</div><div style="font-size:11px;color:${red?'var(--danger)':'var(--brand-d)'};margin-top:2px">${sub}</div></div>`;
@@ -1217,8 +1217,8 @@ async function renderFleet(){
     <div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(160px,1fr))">
       ${kpi("VEHICLES",V.length,"🚙",`${bikes} bike${bikes===1?"":"s"} · ${fourw} four-wheel`)}
       ${kpi("KM · THIS MONTH",mAgg.km.toLocaleString("en-IN"),"📏",mAgg.km?`across ${V.length} vehicle${V.length===1?"":"s"}`:"no km logged")}
-      ${kpi("FUEL · THIS MONTH",money(mAgg.fuel),"⛽",mAgg.lit?`${mAgg.lit.toFixed(1)} L · ${mAgg.fills} fill${mAgg.fills===1?"":"s"}`:"no fuel logged")}
-      ${kpi("₹ / KM · AVG",avgCpk?"₹"+avgCpk.toFixed(2):"—","💸",avgCpk?"this month":"need km + fuel")}
+      ${kpi("RUNNING ₹ · THIS MONTH",money(mAgg.fuel+mAgg.svc),"💸",`fuel ${money(mAgg.fuel)} · service ${money(mAgg.svc)}`)}
+      ${kpi("₹ / KM · AVG",avgCpk?"₹"+avgCpk.toFixed(2):"—","📉",avgCpk?"fuel + service this month":"need km + fuel")}
       ${kpi("BEST MILEAGE",bestEc?bestEc.ec.toFixed(1):"—","🏆",bestEc?esc(bestEc.v.number||bestEc.v.name)+" · km/l · "+bestEc.fills+" fills":"need ≥3 fills per vehicle")}
       ${kpi("ALERTS",allAlerts.length,"⚠",allAlerts.length?`${expired} expired/overdue · ${due} due`:"all up to date",allAlerts.length>0)}
     </div>
@@ -1234,7 +1234,7 @@ async function renderFleet(){
           <div style="display:flex;gap:8px;margin-top:12px;background:var(--bg);border-radius:10px;padding:10px 6px">
             ${big((tm||ec)?(tm||ec).toFixed(1):"—","km/l "+(tm?"trip":"lifetime"),ec&&tm?"lifetime "+ec.toFixed(1):"","var(--brand-d)")}
             ${big(m.km?m.km.toLocaleString("en-IN"):"—","km this month",m.lit?m.lit.toFixed(1)+" L":"")}
-            ${big(m.cpk?"₹"+m.cpk.toFixed(2):"—","₹ / km",m.fuel?money(m.fuel)+" fuel":"")}
+            ${big(m.cpk?"₹"+m.cpk.toFixed(2):"—","₹ / km · total",m.fuel||m.svc?`${money(m.fuel)} fuel${m.svc?" + "+money(m.svc)+" svc":""}`:"")}
           </div>
           ${drop?`<div style="margin-top:8px;background:#FBEAE5;color:var(--danger);border-radius:8px;padding:7px 10px;font-size:11.5px;font-weight:700">⚠ Mileage dropped ${drop}% on last tank — possible fuel theft / engine issue</div>`:""}
           <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:10px">${docPill("INS",v.insuranceExpiry)}${docPill("PUC",v.pucExpiry)}${docPill("FIT",v.fitnessExpiry,typeNeedsFitness(v.type))}</div>
@@ -1247,7 +1247,7 @@ async function renderFleet(){
       <div class="card"><div style="display:flex;align-items:center;margin-bottom:6px"><b style="font-size:14.5px">Alerts</b><span style="margin-left:auto;font-size:12px;color:var(--soft)">${allAlerts.length} need action</span></div>
         ${allAlerts.length?allAlerts.slice(0,8).map(o=>{ const exp=/EXPIRED|OVERDUE/.test(o.a); return `<div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--line)"><span style="width:30px;height:30px;border-radius:8px;background:${exp?'#FBEAE5':'#FFF6DC'};display:flex;align-items:center;justify-content:center;flex:0 0 auto">${exp?'⚠️':'🔧'}</span><div style="flex:1;min-width:0"><b style="font-size:12.5px">${esc(o.a)}</b><br><span style="font-size:11px;color:var(--soft)">${esc(o.v.number||o.v.name||"Vehicle")}${o.v.model?" · "+esc(o.v.model):""}</span></div></div>`; }).join(""):`<div style="color:var(--green);font-size:13px;padding:10px 0">✓ All vehicles up to date.</div>`}
       </div>
-      <div class="card"><div style="display:flex;align-items:center;margin-bottom:10px"><b style="font-size:14.5px">Running cost · this month</b><span style="margin-left:auto;font-size:11.5px;color:var(--soft)">₹ / km · lower is better</span></div>
+      <div class="card"><div style="display:flex;align-items:center;margin-bottom:10px"><b style="font-size:14.5px">Running cost · this month</b><span style="margin-left:auto;font-size:11.5px;color:var(--soft)">fuel + service ₹/km · lower is better</span></div>
         ${(()=>{ const fe=V.map(v=>({v,m:vehMonth(v),ec:vehEconomy(v)})).filter(o=>o.m.cpk>0||o.ec>0).sort((a,b)=>(b.m.cpk||0)-(a.m.cpk||0)); const mxC=Math.max(.01,...fe.map(o=>o.m.cpk||0)), mxE=Math.max(1,...fe.map(o=>o.ec||0)); return fe.length?fe.map(o=>`<div style="margin-bottom:13px"><div style="display:flex;align-items:center;font-size:12.5px;font-weight:700;gap:8px"><span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(o.v.number||o.v.name)}${o.v.model?` · <span style="color:var(--soft);font-weight:400">${esc(o.v.model)}</span>`:""}</span>${o.m.cpk?`<span style="color:var(--danger);font-weight:800">₹${o.m.cpk.toFixed(2)}/km</span>`:""}${o.ec?`<span style="color:var(--brand-d);font-size:11px">${o.ec.toFixed(1)} km/l</span>`:""}</div>${o.m.cpk?`<div class="bar" style="margin-top:5px;height:6px;background:#FBEAE5"><i style="width:${Math.round(o.m.cpk*100/mxC)}%;background:var(--danger)"></i></div>`:""}${o.ec?`<div class="bar" style="margin-top:3px;height:5px"><i style="width:${Math.round(o.ec*100/mxE)}%"></i></div>`:""}</div>`).join(""):`<div style="color:var(--soft);font-size:13px">No fuel logs yet.</div>`; })()}
       </div>
     </div>`;
@@ -1371,18 +1371,35 @@ const maintCatOf=name=>MAINT_CAT[(name||"").toLowerCase()]||"Service"; // Servic
 // Split a comma-joined service entry's type into per-item pills with category icon (🔧 Service / 🛠️ Repair).
 function typeBadges(s){ const items=(s||"").split(",").map(x=>x.trim()).filter(Boolean); if(!items.length) return '<span style="color:var(--soft)">—</span>'; return items.map(it=>{ const isRep=maintCatOf(it)==="Repair"; const ic=isRep?"🛠️":"🔧"; const fg=isRep?"#8B5E3C":"var(--brand-d)"; const bg=isRep?"#F5E6D8":"#FFF6DC"; return `<span style="display:inline-flex;align-items:center;gap:3px;background:${bg};color:${fg};border-radius:50px;padding:2px 8px;font-size:11px;font-weight:700;margin:1px 3px 1px 0">${ic} ${esc(it)}</span>`; }).join(""); }
 const fleetRid=()=>Math.random().toString(36).slice(2,10);
-function vehEconomy(v){ const s=(v.fuelLogs||[]).filter(f=>f.odometer>0&&f.litres>0).sort((a,b)=>a.odometer-b.odometer); if(s.length<2)return 0; const dist=s[s.length-1].odometer-s[0].odometer, lit=s.reduce((a,b)=>a+(b.litres||0),0)-s[0].litres; return (lit>0&&dist>0)?dist/lit:0; }
-// Mileage for the latest tank (between the last two fills) — km covered ÷ litres put in at the last fill.
-function vehTripMileage(v){ const s=(v.fuelLogs||[]).filter(f=>f.odometer>0&&f.litres>0).sort((a,b)=>a.odometer-b.odometer); if(s.length<2)return 0; const a=s[s.length-2], b=s[s.length-1], dist=b.odometer-a.odometer, lit=b.litres||0; return (lit>0&&dist>0)?dist/lit:0; }
-// This-month metrics (calendar month) — distance, fuel ₹, litres, ₹/km, all from fuel logs.
+// Tank-to-tank mileage handles partial fills correctly: full tank → partial(s) → full tank.
+// Distance = end-full's odo - start-full's odo; Litres = sum of all fills AFTER start-full up to and including end-full.
+// Backward-compat: a fill missing `fullTank` is treated as full (matches the pre-partial-fills behavior).
+const _isFull=f=>f.fullTank!==false;
+// Lifetime mileage — from FIRST full fill to LAST full fill.
+function vehEconomy(v){ const s=(v.fuelLogs||[]).filter(f=>f.odometer>0&&f.litres>0).sort((a,b)=>a.odometer-b.odometer); if(s.length<2) return 0;
+  let f=-1,l=-1; for(let i=0;i<s.length;i++){ if(_isFull(s[i])){ f=i; break; } } if(f<0) return 0;
+  for(let i=s.length-1;i>f;i--){ if(_isFull(s[i])){ l=i; break; } } if(l<=f) return 0;
+  const dist=s[l].odometer-s[f].odometer; let lit=0; for(let i=f+1;i<=l;i++) lit+=s[i].litres||0;
+  return (dist>0&&lit>0)?dist/lit:0;
+}
+// Trip mileage — last full fill window: prev-full → (partials) → last-full.
+function vehTripMileage(v){ const s=(v.fuelLogs||[]).filter(f=>f.odometer>0&&f.litres>0).sort((a,b)=>a.odometer-b.odometer); if(s.length<2) return 0;
+  let l=-1; for(let i=s.length-1;i>=0;i--){ if(_isFull(s[i])){ l=i; break; } } if(l<=0) return 0;
+  let p=-1; for(let i=l-1;i>=0;i--){ if(_isFull(s[i])){ p=i; break; } } if(p<0) return 0;
+  const dist=s[l].odometer-s[p].odometer; let lit=0; for(let i=p+1;i<=l;i++) lit+=s[i].litres||0;
+  return (dist>0&&lit>0)?dist/lit:0;
+}
+// This-month metrics — distance, fuel ₹, SERVICE ₹, total running ₹, litres, ₹/km (total = fuel+service).
 function vehMonth(v){ const now=new Date(), mStart=new Date(now.getFullYear(),now.getMonth(),1).getTime();
   const logs=(v.fuelLogs||[]).filter(f=>(f.date||0)>=mStart && f.odometer>0).sort((a,b)=>a.odometer-b.odometer);
   const all=(v.fuelLogs||[]).filter(f=>f.odometer>0).sort((a,b)=>a.odometer-b.odometer);
   const fuel=logs.reduce((a,b)=>a+(b.amount||0),0), litres=logs.reduce((a,b)=>a+(b.litres||0),0);
-  // Distance this month: from the fill just before the month started (if any) to the latest fill in month
   let km=0; if(logs.length){ const last=logs[logs.length-1].odometer; const earlier=all.filter(f=>f.odometer<=logs[0].odometer); const start=earlier.length?earlier[earlier.length-1].odometer:logs[0].odometer; km=Math.max(0,last-start); }
-  const cpk=km>0?fuel/km:0;
-  return {km,fuel,litres,cpk,fills:logs.length};
+  const svcLogs=(v.serviceLogs||[]).filter(s=>(s.date||0)>=mStart);
+  const svc=svcLogs.reduce((a,b)=>a+(b.amount||0),0);
+  const total=fuel+svc;
+  const cpk=km>0?total/km:0, cpkFuel=km>0?fuel/km:0;
+  return {km,fuel,svc,total,litres,cpk,cpkFuel,fills:logs.length,svcCount:svcLogs.length};
 }
 // Mileage-drop flag: latest tank << lifetime by 20%+ (and we have ≥3 fills total) — early warning for fuel theft / engine issues.
 function vehMileageDrop(v){ const ec=vehEconomy(v), tm=vehTripMileage(v); if(ec>0&&tm>0&&(v.fuelLogs||[]).length>=3&&tm<ec*0.8) return Math.round((1-tm/ec)*100); return 0; }
@@ -1422,7 +1439,7 @@ function openVehicle(v){
     <div class="filters" style="margin-top:14px"><button class="btn y" id="vFuel">⛽ Add fuel</button><button class="btn" id="vSvc">🔧 Add service</button><span style="font-size:11px;color:var(--soft);align-self:center;margin-left:auto">Edit vehicle details from <b>Manage vehicles</b></span></div>`;
   const fuelHtml=`
     <div style="display:flex;align-items:center;margin-bottom:10px"><b style="font-size:14.5px">Fuel log</b><span style="margin-left:auto;font-size:12px;color:var(--soft)">${fuelN} entr${fuelN===1?"y":"ies"}</span><button class="btn y" id="vFuel" style="margin-left:10px">⛽ Add fuel</button></div>
-    ${fuelN?`<div class="tablewrap"><table><tr><th>Date</th><th>Project</th><th>Odometer</th><th>Litres</th><th>₹</th><th></th></tr>${(v.fuelLogs||[]).slice().sort((a,b)=>(b.date||0)-(a.date||0)).map(f=>`<tr><td>${fmtDate(f.date)}</td><td>${esc(f.project||"—")}</td><td>${f.odometer} km</td><td>${(f.litres||0).toFixed(2)}</td><td>${money(f.amount||0)}</td><td style="white-space:nowrap"><span class="logEdit" data-id="${esc(f.id||"")}" title="Edit entry" style="color:var(--brand-d);cursor:pointer;font-weight:700;margin-right:10px">✏️</span><span class="logDel" data-kind="fuel" data-id="${esc(f.id||"")}" title="Delete entry" style="color:var(--danger);cursor:pointer;font-weight:700">✕</span></td></tr>`).join("")}</table></div>`:`<div class="card loading">No fuel logs yet. Tap <b>⛽ Add fuel</b> above.</div>`}`;
+    ${fuelN?`<div class="tablewrap"><table><tr><th>Date</th><th>Project</th><th>Odometer</th><th>Litres</th><th>₹</th><th>Tank</th><th></th></tr>${(v.fuelLogs||[]).slice().sort((a,b)=>(b.date||0)-(a.date||0)).map(f=>{ const full=f.fullTank!==false; return `<tr><td>${fmtDate(f.date)}</td><td>${esc(f.project||"—")}</td><td>${f.odometer} km</td><td>${(f.litres||0).toFixed(2)}</td><td>${money(f.amount||0)}</td><td><span style="font-size:10.5px;font-weight:700;border-radius:50px;padding:2px 8px;background:${full?'#E8F5EC':'#FFF6DC'};color:${full?'#1B873F':'var(--brand-d)'}" title="${full?'Full tank — used as a mileage checkpoint':'Partial fill — counted in fuel ₹ but not a mileage checkpoint'}">${full?'Full':'Partial'}</span></td><td style="white-space:nowrap"><span class="logEdit" data-id="${esc(f.id||"")}" title="Edit entry" style="color:var(--brand-d);cursor:pointer;font-weight:700;margin-right:10px">✏️</span><span class="logDel" data-kind="fuel" data-id="${esc(f.id||"")}" title="Delete entry" style="color:var(--danger);cursor:pointer;font-weight:700">✕</span></td></tr>`; }).join("")}</table></div>`:`<div class="card loading">No fuel logs yet. Tap <b>⛽ Add fuel</b> above.</div>`}`;
   const svcHtml=`
     <div style="display:flex;align-items:center;margin-bottom:10px"><b style="font-size:14.5px">Service log</b><span style="margin-left:auto;font-size:12px;color:var(--soft)">${svcN} entr${svcN===1?"y":"ies"}</span><button class="btn" id="vSvc" style="margin-left:10px">🔧 Add service</button></div>
     ${svcN?`<div class="tablewrap"><table><tr><th>Date</th><th>Type</th><th>Project</th><th>Odometer</th><th>₹ Total</th><th>Parts</th><th>Labour</th><th>Garage</th><th>Next due</th><th>Bill</th><th></th></tr>${(v.serviceLogs||[]).slice().sort((a,b)=>(b.date||0)-(a.date||0)).map(s=>`<tr><td>${fmtDate(s.date)}</td><td class="wrap">${typeBadges(s.type)}</td><td>${esc(s.project||"—")}</td><td>${s.odometer} km</td><td>${money(s.amount||0)}</td><td>${money(Math.max(0,(s.amount||0)-(s.labour||0)))}</td><td>${s.labour?money(s.labour):"—"}</td><td>${esc(s.garage||"—")}${s.garagePhone?` <a href="tel:${esc(s.garagePhone)}" style="color:var(--brand-d);text-decoration:none">📞</a>`:""}</td><td>${s.nextDue?fmtDate(s.nextDue):"—"}</td><td>${s.billPhoto?`<span class="svBill" data-p="${esc(s.billPhoto)}" title="View bill" style="cursor:pointer;color:var(--brand-d)">${/\.pdf$/i.test(s.billPhoto)?"📄":"📷"}</span>`:"—"}</td><td style="white-space:nowrap"><span class="logEditSvc" data-id="${esc(s.id||"")}" title="Edit entry" style="color:var(--brand-d);cursor:pointer;font-weight:700;margin-right:10px">✏️</span><span class="logDel" data-kind="service" data-id="${esc(s.id||"")}" title="Delete entry" style="color:var(--danger);cursor:pointer;font-weight:700">✕</span></td></tr>`).join("")}</table></div>`:`<div class="card loading">No service logs yet. Tap <b>🔧 Add service</b> above.</div>`}`;
@@ -1550,8 +1567,9 @@ function fuelForm(v, edit){
   m.innerHTML=`<div class="modalbox"><h3 style="margin:0 0 4px">${edit?"✏️ Edit fuel":"⛽ Add fuel"} — ${esc(v.name||v.number)}</h3>
     <div style="font-size:12px;color:var(--soft);margin-bottom:8px">Odometer updates km & mileage.</div>
     <div class="filters"><input type="date" id="flDate" value="${fd.toISOString().slice(0,10)}" title="Fuel date (back-date allowed)"><input type="number" id="flOdo" placeholder="Odometer (km)" value="${edit?(edit.odometer||""):(v.currentKm||"")}"><input type="number" id="flLit" step="0.01" max="9999.99" placeholder="Litres" value="${edit?(edit.litres||""):""}"><input type="number" id="flRate" placeholder="₹/Litre" value="${edit?(edit.ratePerLitre||""):""}"><input type="number" id="flAmt" placeholder="Amount ₹" value="${edit?(edit.amount||""):""}"></div>
-    <div class="filters" style="margin-top:8px"><select id="flProj" style="flex:1;min-width:180px"><option value="">📁 General / no project</option>${[...new Set((CATALOG.distributors||[]).map(d=>d.name).filter(Boolean))].sort().map(p=>`<option ${edit&&edit.project===p?"selected":""}>${esc(p)}</option>`).join("")}</select></div>
-    <div style="font-size:11px;color:var(--soft);margin-top:6px">Enter any two of Litres / ₹ per litre / Amount — the third auto-calculates.</div>
+    <div class="filters" style="margin-top:8px;align-items:center"><select id="flProj" style="flex:1;min-width:180px"><option value="">📁 General / no project</option>${[...new Set((CATALOG.distributors||[]).map(d=>d.name).filter(Boolean))].sort().map(p=>`<option ${edit&&edit.project===p?"selected":""}>${esc(p)}</option>`).join("")}</select><label style="display:inline-flex;align-items:center;gap:6px;background:var(--bg);border-radius:9px;padding:8px 13px;cursor:pointer;font-size:13px;font-weight:700;white-space:nowrap" title="Uncheck if you didn't fill the tank to full. Mileage is calculated correctly across partial fills (tank-to-tank window).">
+      <input type="checkbox" id="flFull" ${(edit?(edit.fullTank!==false):true)?"checked":""}> Full tank</label></div>
+    <div style="font-size:11px;color:var(--soft);margin-top:6px">Enter any two of Litres / ₹ per litre / Amount — the third auto-calculates. Uncheck <b>Full tank</b> for a partial fill.</div>
     <div style="text-align:right;margin-top:12px"><button class="btn" id="flCancel">Cancel</button> <button class="btn y" id="flSave">${edit?"Update":"Save"}</button></div></div>`;
   m.onclick=ev=>{ if(ev.target===m) m.classList.add("hidden"); }; $("#flCancel").onclick=()=>m.classList.add("hidden");
   const flCalc=src=>{ const lit=parseFloat($("#flLit").value)||0, rate=parseFloat($("#flRate").value)||0, amt=parseFloat($("#flAmt").value)||0;
@@ -1559,7 +1577,7 @@ function fuelForm(v, edit){
     else if(lit>0&&rate>0){ $("#flAmt").value=Math.round(lit*rate); }
     else if(lit>0&&amt>0){ $("#flRate").value=(amt/lit).toFixed(2); } };
   $("#flLit").oninput=()=>flCalc("lit"); $("#flRate").oninput=()=>flCalc("rate"); $("#flAmt").oninput=()=>flCalc("amt");
-  $("#flSave").onclick=async()=>{ const odo=parseInt($("#flOdo").value)||0; const dStr=$("#flDate").value, date=dStr?new Date(dStr+"T12:00:00").getTime():Date.now(); const log={id:edit?edit.id:fleetRid(),date,odometer:odo,litres:Math.round((parseFloat($("#flLit").value)||0)*100)/100,ratePerLitre:parseFloat($("#flRate").value)||0,amount:parseFloat($("#flAmt").value)||0,project:$("#flProj").value,note:edit?(edit.note||""):""};
+  $("#flSave").onclick=async()=>{ const odo=parseInt($("#flOdo").value)||0; const dStr=$("#flDate").value, date=dStr?new Date(dStr+"T12:00:00").getTime():Date.now(); const log={id:edit?edit.id:fleetRid(),date,odometer:odo,litres:Math.round((parseFloat($("#flLit").value)||0)*100)/100,ratePerLitre:parseFloat($("#flRate").value)||0,amount:parseFloat($("#flAmt").value)||0,project:$("#flProj").value,fullTank:$("#flFull").checked,note:edit?(edit.note||""):""};
     const logs=edit?(v.fuelLogs||[]).map(x=>x.id===edit.id?log:x):[...(v.fuelLogs||[]),log];
     try{ await setDoc(doc(db,"fleet",v.id),{fuelLogs:logs,currentKm:Math.max(odo,v.currentKm||0),updatedAt:Date.now()},{merge:true}); logAudit("vehicle",`${edit?"Edited fuel":"Fuel"} ${odo}km for ${v.name||v.number}`); v.fuelLogs=logs; v.currentKm=Math.max(odo,v.currentKm||0); openVehicle(v); renderFleet(); }catch(e){ alert(e.message||e); } };
 }

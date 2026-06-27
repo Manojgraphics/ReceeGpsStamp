@@ -1555,9 +1555,9 @@ function renderSetup(){
       <div style="display:flex;align-items:center;gap:10px;margin-top:18px;flex-wrap:wrap;border-top:1px solid var(--line);padding-top:16px">
         <button class="btn" id="suPick">⬆ Import CSV</button>
         <div style="flex:1"></div>
-        <span style="font-size:12.5px;color:var(--soft);font-weight:600">Assign to</span>
-        <select id="suSur" class="suInp" style="width:auto;min-width:170px"><option value="">field user…</option>${surs.map(s=>`<option value="${esc(s.uid)}">${esc(s.name)}</option>`).join("")}</select>
-        <button class="btn y" id="suGo">Save &amp; assign</button>
+        <span style="font-size:12.5px;color:var(--soft);font-weight:600" title="Optional — leave empty to save to catalog only. Shops (if any) need a field user.">Assign to <span style="color:var(--soft);font-weight:400">(optional)</span></span>
+        <select id="suSur" class="suInp" style="width:auto;min-width:170px"><option value="">— catalog only —</option>${surs.map(s=>`<option value="${esc(s.uid)}">${esc(s.name)}</option>`).join("")}</select>
+        <button class="btn y" id="suGo">Save</button>
       </div>
     </div>
     <datalist id="compListS">${catComps.map(c=>`<option value="${esc(c)}"></option>`).join("")}</datalist>
@@ -1724,28 +1724,37 @@ async function upsertCatalog(company, creatives, mediaTypes, projName, city, con
   }catch(e){ /* non-fatal */ }
 }
 async function doSetupAssign(){
-  const uid=$("#suSur").value; if(!uid){ alert("Select a field user"); return; }
+  const uid=$("#suSur").value;  // optional — empty = save to shared catalog only
   const company=$("#suComp").value.trim(); if(!company){ alert("① Enter a company name"); return; }
   const creatives=$("#suCre").value.split(",").map(x=>x.trim()).filter(Boolean);
   const mediaTypes=$("#suMed").value.split(",").map(x=>x.trim()).filter(Boolean);
   const name=$("#suProj").value.trim(), city=$("#suCity").value.trim(), contact=$("#suContact").value.replace(/\D/g,"").slice(0,10);
   const setup={company,creatives,mediaTypes,name,city,contact};
   const lines=$("#suShops").value.split("\n").map(l=>l.trim()).filter(Boolean);
+  if(lines.length && !uid){ alert("Shops need a field user — pick one in 'Assign to', or clear the shops to save catalog-only."); return; }
   if(lines.length && !name){ alert("④ Enter a project name for the shops"); return; }
   const incoming=lines.map(l=>{ const p=l.split(",").map(x=>x.trim()); return {id:rid(),name:p[0]||"",city:p[1]||"",contact:(p[2]||"").replace(/\D/g,"").slice(0,10),company,project:name}; }).filter(s=>s.name);
   try{
-    const r=doc(db,"assignments",uid), d=await getDoc(r), data=(d.exists()&&d.data())||{};
-    const curP=data.projects||[], curS=data.shops||[];
-    const pi=curP.findIndex(p=>(p.company||"").toLowerCase()===company.toLowerCase()&&(p.name||"").toLowerCase()===name.toLowerCase());
-    if(pi>=0) curP[pi]=setup; else curP.push(setup);
-    const seen=new Set(curS.map(s=>(s.name||"").toLowerCase()+"|"+(s.project||"").toLowerCase()));
-    const addS=incoming.filter(s=>!seen.has(s.name.toLowerCase()+"|"+(s.project||"").toLowerCase()));
-    await setDoc(r,{projects:curP,shops:[...curS,...addS],updatedAt:Date.now()},{merge:true});
-    await upsertCatalog(company, creatives, mediaTypes, name, city, contact);
-    logAudit("setup",`Setup "${company}${name?" / "+name:""}"`+(addS.length?` + ${addS.length} shop(s)`:"")+` for ${(($("#suSur").selectedOptions[0]||{}).text)||uid}`);
-    $("#suShops").value="";
-    alert(`Saved ✓  Setup${addS.length?` + ${addS.length} shop(s)`:""} will appear in the field user's app after it syncs.`);
-    drawCurrent(uid);
+    if(uid){
+      const r=doc(db,"assignments",uid), d=await getDoc(r), data=(d.exists()&&d.data())||{};
+      const curP=data.projects||[], curS=data.shops||[];
+      const pi=curP.findIndex(p=>(p.company||"").toLowerCase()===company.toLowerCase()&&(p.name||"").toLowerCase()===name.toLowerCase());
+      if(pi>=0) curP[pi]=setup; else curP.push(setup);
+      const seen=new Set(curS.map(s=>(s.name||"").toLowerCase()+"|"+(s.project||"").toLowerCase()));
+      const addS=incoming.filter(s=>!seen.has(s.name.toLowerCase()+"|"+(s.project||"").toLowerCase()));
+      await setDoc(r,{projects:curP,shops:[...curS,...addS],updatedAt:Date.now()},{merge:true});
+      await upsertCatalog(company, creatives, mediaTypes, name, city, contact);
+      const uname=(($("#suSur").selectedOptions[0]||{}).text)||uid;
+      logAudit("setup",`Setup "${company}${name?" / "+name:""}"`+(addS.length?` + ${addS.length} shop(s)`:"")+` for ${uname}`);
+      $("#suShops").value="";
+      alert(`Saved ✓  Setup${addS.length?` + ${addS.length} shop(s)`:""} will appear in ${uname}'s app after it syncs.`);
+      drawCurrent(uid);
+    } else {
+      await upsertCatalog(company, creatives, mediaTypes, name, city, contact);
+      logAudit("setup",`Added to catalog: "${company}${name?" / "+name:""}"`);
+      alert(`Saved to catalog ✓  "${name||company}" is now available to assign to any field user — open "📌 Assign an existing project" below.`);
+      renderSetup();
+    }
   }catch(e){ alert("Could not save: "+(e.message||e)); }
 }
 async function drawCurrent(uid){

@@ -1237,7 +1237,8 @@ async function installPpt(recces, scope){
     const s=ppt.addSlide(), sz=sizeStr(mi);
     s.addText(r.shop||"Shop",{x:0.3,y:0.2,w:9.4,h:0.5,fontSize:20,bold:true});
     s.addText(`${mi.type||""}${sz?(" · "+sz):""}${mi.creative?("  ·  "+mi.creative):""}   |   ${r.project||""}  ·  ${r.city||""}  ·  ${r.surveyor||""}    ${fmtDate(r.date)}`,{x:0.3,y:0.74,w:9.4,h:0.4,fontSize:12,color:"666666"});
-    s.addText(`Status: ${(fi&&fi.status)||i.install||"-"}${(fi&&fi.reason)?(" ("+fi.reason+")"):""}    ${i.remark||""}`,{x:0.3,y:1.12,w:9.4,h:0.35,fontSize:11,color:"888888"});
+    const gps=(fi&&fi.lat&&fi.lng)?`${fi.lat.toFixed(5)}, ${fi.lng.toFixed(5)}`:(r.lat&&r.lng)?`${r.lat.toFixed(5)}, ${r.lng.toFixed(5)}`:"";
+    s.addText(`Status: ${(fi&&fi.status)||i.install||"-"}${(fi&&fi.reason)?(" ("+fi.reason+")"):""}${gps?("    📍 "+gps):""}    ${i.remark||""}`,{x:0.3,y:1.12,w:9.4,h:0.35,fontSize:11,color:"888888"});
     const before=(mi.photos&&mi.photos.length)?mi.photos:(r.photos||[]), after=(fi&&fi.afterPhotos)||[];
     s.addText("BEFORE — recce",{x:0.3,y:1.55,w:4.5,h:0.3,fontSize:11,bold:true,color:"888888"});
     s.addText("AFTER — install",{x:5.1,y:1.55,w:4.5,h:0.3,fontSize:11,bold:true,color:"888888"});
@@ -1267,7 +1268,8 @@ async function installPdf(recces, scope){
     d.setTextColor(20,20,20); d.setFontSize(16); d.text(r.shop||"Shop",14,16);
     d.setFontSize(10); d.setTextColor(100,100,100);
     d.text(`${mi.type||""}${sz?(" · "+sz):""}  |  ${r.project||""} · ${r.city||""} · ${r.surveyor||""}  ${fmtDate(r.date)}`,14,23);
-    d.text(`Status: ${(fi&&fi.status)||"-"}${(fi&&fi.reason)?(" ("+fi.reason+")"):""}  ${i.remark||""}`,14,29);
+    const gps=(fi&&fi.lat&&fi.lng)?`${fi.lat.toFixed(5)}, ${fi.lng.toFixed(5)}`:(r.lat&&r.lng)?`${r.lat.toFixed(5)}, ${r.lng.toFixed(5)}`:"";
+    d.text(`Status: ${(fi&&fi.status)||"-"}${(fi&&fi.reason)?(" ("+fi.reason+")"):""}${gps?("  GPS: "+gps):""}  ${i.remark||""}`,14,29);
     d.setTextColor(120,120,120); d.text("BEFORE — recce",14,38); d.text("AFTER — install",155,38);
     const before=(mi.photos&&mi.photos.length)?mi.photos:(r.photos||[]), after=(fi&&fi.afterPhotos)||[];
     try{ const u=before.length?await photoURL(r.uid,before[0]):null; const b=u?await imgToDataURL(u):null; if(b) d.addImage(b,"JPEG",14,42,130,98); }catch(e){}

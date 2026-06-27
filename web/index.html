@@ -972,9 +972,12 @@ async function drawFleet(){
           <div style="display:flex;align-items:center;gap:8px"><b style="font-size:14.5px">${esc(v.name||v.number||"Vehicle")}</b>${(ec||tm)?`<span style="margin-left:auto;color:var(--brand-d);font-weight:700;font-size:12px" title="this trip / lifetime">${tm?tm.toFixed(1):"—"} / ${ec?ec.toFixed(1):"—"} km/l</span>`:""}</div>
           <div style="color:var(--soft);font-size:11.5px;margin-top:2px">${[v.number&&v.name?esc(v.number):"",esc(v.model||""),esc(v.type||""),`${v.currentKm||0} km`].filter(Boolean).join(" · ")}</div>
           ${al.length?`<div style="margin-top:7px">${al.slice(0,3).map(a=>`<div style="color:var(--danger);font-size:11.5px">⚠ ${esc(a)}</div>`).join("")}</div>`:`<div style="margin-top:7px;color:var(--green);font-size:11.5px">✓ all up to date</div>`}
+          <div style="display:flex;gap:6px;margin-top:9px"><button class="btn y vQFuel" data-id="${esc(v.id)}" style="flex:1;padding:6px;font-size:11.5px">⛽ Fuel</button><button class="btn vQSvc" data-id="${esc(v.id)}" style="flex:1;padding:6px;font-size:11.5px">🔧 Service</button></div>
         </div>`; }).join("")+`</div>`
       : `<div class="card loading">No vehicles yet — add your company vehicles above.</div>`;
     el.querySelectorAll(".vehCard").forEach(c=>c.onclick=()=>{ const v=list.find(x=>x.id===c.dataset.id); if(v) openVehicle(v); });
+    el.querySelectorAll(".vQFuel").forEach(b=>b.onclick=e=>{ e.stopPropagation(); const v=list.find(x=>x.id===b.dataset.id); if(v) fuelForm(v); });
+    el.querySelectorAll(".vQSvc").forEach(b=>b.onclick=e=>{ e.stopPropagation(); const v=list.find(x=>x.id===b.dataset.id); if(v) serviceForm(v); });
   }catch(e){ el.innerHTML=`<div class="loading">Error: ${esc(e.message||e)}</div>`; }
 }
 function openVehicle(v){
@@ -1086,10 +1089,16 @@ function fuelForm(v){
   const m=$("#modal"); m.classList.remove("hidden");
   m.innerHTML=`<div class="modalbox"><h3 style="margin:0 0 4px">⛽ Add fuel — ${esc(v.name||v.number)}</h3>
     <div style="font-size:12px;color:var(--soft);margin-bottom:8px">Odometer updates km & mileage.</div>
-    <div class="filters"><input type="date" id="flDate" value="${new Date().toISOString().slice(0,10)}" title="Fuel date (back-date allowed)"><input type="number" id="flOdo" placeholder="Odometer (km)" value="${v.currentKm||""}"><input type="number" id="flLit" placeholder="Litres"><input type="number" id="flAmt" placeholder="Amount ₹"></div>
+    <div class="filters"><input type="date" id="flDate" value="${new Date().toISOString().slice(0,10)}" title="Fuel date (back-date allowed)"><input type="number" id="flOdo" placeholder="Odometer (km)" value="${v.currentKm||""}"><input type="number" id="flLit" placeholder="Litres"><input type="number" id="flRate" placeholder="₹/Litre"><input type="number" id="flAmt" placeholder="Amount ₹"></div>
+    <div style="font-size:11px;color:var(--soft);margin-top:6px">Enter any two of Litres / ₹ per litre / Amount — the third auto-calculates.</div>
     <div style="text-align:right;margin-top:12px"><button class="btn" id="flCancel">Cancel</button> <button class="btn y" id="flSave">Save</button></div></div>`;
   m.onclick=ev=>{ if(ev.target===m) m.classList.add("hidden"); }; $("#flCancel").onclick=()=>m.classList.add("hidden");
-  $("#flSave").onclick=async()=>{ const odo=parseInt($("#flOdo").value)||0; const dStr=$("#flDate").value, date=dStr?new Date(dStr+"T12:00:00").getTime():Date.now(); const log={id:fleetRid(),date,odometer:odo,litres:parseFloat($("#flLit").value)||0,amount:parseFloat($("#flAmt").value)||0,note:""};
+  const flCalc=src=>{ const lit=parseFloat($("#flLit").value)||0, rate=parseFloat($("#flRate").value)||0, amt=parseFloat($("#flAmt").value)||0;
+    if(src==="amt"){ if(lit>0) $("#flRate").value=(amt/lit).toFixed(2); }
+    else if(lit>0&&rate>0){ $("#flAmt").value=Math.round(lit*rate); }
+    else if(lit>0&&amt>0){ $("#flRate").value=(amt/lit).toFixed(2); } };
+  $("#flLit").oninput=()=>flCalc("lit"); $("#flRate").oninput=()=>flCalc("rate"); $("#flAmt").oninput=()=>flCalc("amt");
+  $("#flSave").onclick=async()=>{ const odo=parseInt($("#flOdo").value)||0; const dStr=$("#flDate").value, date=dStr?new Date(dStr+"T12:00:00").getTime():Date.now(); const log={id:fleetRid(),date,odometer:odo,litres:parseFloat($("#flLit").value)||0,ratePerLitre:parseFloat($("#flRate").value)||0,amount:parseFloat($("#flAmt").value)||0,note:""};
     try{ await setDoc(doc(db,"fleet",v.id),{fuelLogs:[...(v.fuelLogs||[]),log],currentKm:Math.max(odo,v.currentKm||0),updatedAt:Date.now()},{merge:true}); logAudit("vehicle",`Fuel ${odo}km for ${v.name||v.number}`); m.classList.add("hidden"); drawFleet(); }catch(e){ alert(e.message||e); } };
 }
 function serviceForm(v){

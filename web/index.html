@@ -29,7 +29,7 @@
   #login{min-height:100vh;display:flex;align-items:center;justify-content:center;background:radial-gradient(1200px 650px at 50% -15%,#16222e,#0a0f15);color:#fff;padding:20px}
   .loginbox{max-width:400px;width:100%;text-align:center;background:#ffffff0a;border:1px solid #ffffff1a;border-radius:20px;padding:42px 30px;backdrop-filter:blur(10px);box-shadow:0 30px 80px rgba(0,0,0,.45)}
   .logo{width:60px;height:60px;border-radius:15px;background:var(--brand);display:flex;align-items:center;justify-content:center;font-weight:800;color:var(--brand-text);margin:0 auto 16px;font-size:17px;box-shadow:0 10px 28px rgba(242,183,5,.4)}
-  .gbtn{display:inline-flex;align-items:center;gap:10px;background:#fff;color:#15212B;border:none;border-radius:11px;padding:13px 22px;font-size:15px;font-weight:700;cursor:pointer;margin-top:20px;transition:transform .15s,box-shadow .15s}
+  .gbtn{display:inline-flex;align-items:center;gap:10px;background:#fff;color:#1B1B1B;border:none;border-radius:11px;padding:13px 22px;font-size:15px;font-weight:700;cursor:pointer;margin-top:20px;transition:transform .15s,box-shadow .15s}
   .gbtn:hover{transform:translateY(-1px);box-shadow:0 10px 26px rgba(0,0,0,.35)}
   .muted{color:#ffffff8c;font-size:13.5px;line-height:1.65}
   /* Top bar */
@@ -141,7 +141,7 @@
   <div class="layout">
     <nav class="sidebar">
       <div class="nav-section">Main</div>
-      <div class="nav-item on" data-tab="overview"><span class="nav-ic"><i class="ti ti-layout-dashboard"></i></span>Dashboard</div>
+      <div class="nav-item on" data-tab="overview"><span class="nav-ic"><i class="ti ti-layout-dashboard"></i></span>Overview</div>
       <div class="nav-item" data-tab="leaderboard"><span class="nav-ic"><i class="ti ti-trophy"></i></span>Leaderboard</div>
       <div class="nav-item" data-tab="team"><span class="nav-ic"><i class="ti ti-users-group"></i></span>Field Team</div>
       <div class="nav-item" data-tab="projects"><span class="nav-ic"><i class="ti ti-building-store"></i></span>Projects</div>
@@ -407,17 +407,17 @@ function renderOverview(){
         <div style="width:34px;height:34px;border-radius:9px;background:rgba(242,183,5,.18);display:flex;align-items:center;justify-content:center;font-size:17px">📊</div>
         <div style="flex:1"><div style="font-size:16px;font-weight:800">Overview</div><div style="font-size:11px;color:rgba(255,255,255,.55)">All projects · live</div></div>
         <div style="position:relative;width:62px;height:62px">
-          <svg width="62" height="62" viewBox="0 0 62 62"><circle cx="31" cy="31" r="26" fill="none" stroke="rgba(255,255,255,.12)" stroke-width="6"/><circle cx="31" cy="31" r="26" fill="none" stroke="#F2B705" stroke-width="6" stroke-linecap="round" stroke-dasharray="${C}" stroke-dashoffset="${C*(1-conv/100)}" transform="rotate(-90 31 31)"/></svg>
+          <svg width="62" height="62" viewBox="0 0 62 62"><circle cx="31" cy="31" r="26" fill="none" stroke="rgba(255,255,255,.12)" stroke-width="6"/><circle cx="31" cy="31" r="26" fill="none" stroke="#FFC400" stroke-width="6" stroke-linecap="round" stroke-dasharray="${C}" stroke-dashoffset="${C*(1-conv/100)}" transform="rotate(-90 31 31)"/></svg>
           <div style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center"><div style="font-size:13px;font-weight:800">${conv}%</div><div style="font-size:7px;color:rgba(255,255,255,.55)">Convert</div></div>
         </div>
       </div>
       <div style="display:grid;grid-template-columns:repeat(6,1fr);gap:8px;margin-top:14px">
-        ${kpi("👤",fSurveyors().length,"Field Users","#C9A227")}${kpi("🏢",projects,"Projects","#F2B705")}${kpi("🏪",stores,"Stores","#5DA9E9")}${kpi("✓",surveyed,"Surveyed","#59C28A")}${kpi("★",interested,"Interested","#E0A93B")}${kpi("🏗️",totInstalled,"Installed","#4CAF7D")}
+        ${kpi("👤",fSurveyors().length,"Field Users","#C9A227")}${kpi("🏢",projects,"Projects","#FFC400")}${kpi("🏪",stores,"Stores","#5DA9E9")}${kpi("✓",surveyed,"Surveyed","#59C28A")}${kpi("★",interested,"Interested","#E0A93B")}${kpi("🏗️",totInstalled,"Installed","#4CAF7D")}
       </div>
       <div style="display:flex;align-items:center;gap:8px;margin-top:14px">
         <span style="font-size:10.5px;color:rgba(255,255,255,.6);width:64px">Coverage</span>
-        <div style="flex:1;height:7px;border-radius:50px;background:rgba(255,255,255,.12)"><div style="width:${cov}%;height:7px;border-radius:50px;background:#F2B705"></div></div>
-        <span style="font-size:11px;font-weight:800;color:#F2B705">${cov}% · ${surveyed}/${stores}</span>
+        <div style="flex:1;height:7px;border-radius:50px;background:rgba(255,255,255,.12)"><div style="width:${cov}%;height:7px;border-radius:50px;background:#FFC400"></div></div>
+        <span style="font-size:11px;font-weight:800;color:#FFC400">${cov}% · ${surveyed}/${stores}</span>
       </div>
       <div style="display:flex;align-items:center;gap:8px;margin-top:9px">
         <span style="font-size:10.5px;color:rgba(255,255,255,.6);width:64px">Install</span>
@@ -426,7 +426,7 @@ function renderOverview(){
       </div>
     </div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:12px">
-    <div id="ovExp" style="background:linear-gradient(135deg,#F2B705,#E6A91E);border-radius:16px;padding:14px;cursor:pointer">
+    <div id="ovExp" style="background:linear-gradient(135deg,#FFC400,#E6A91E);border-radius:16px;padding:14px;cursor:pointer">
       <div style="display:flex;align-items:center;gap:9px">
         <div style="width:30px;height:30px;border-radius:9px;background:rgba(255,255,255,.55);display:flex;align-items:center;justify-content:center">💰</div>
         <div style="flex:1;font-size:14px;font-weight:800;color:#1a1a1a">Expenses</div><div style="font-size:11.5px;font-weight:800;color:#1a1a1a">View ›</div>
@@ -1185,7 +1185,7 @@ function drawTrail(uid){
   if(!pts.length){ _fleetMap.setView([20.59,78.96],5); return; }
   const latlngs=pts.map(p=>[p.lat,p.lng]);
   L.polyline(latlngs,{color:"#B8890C",weight:3,opacity:.85}).addTo(_fleetMap);
-  pts.forEach((p,i)=>{ L.circleMarker([p.lat,p.lng],{radius:6,color:"#0F1923",fillColor:"#F2B705",fillOpacity:1,weight:1.5})
+  pts.forEach((p,i)=>{ L.circleMarker([p.lat,p.lng],{radius:6,color:"#1C1C1C",fillColor:"#FFC400",fillOpacity:1,weight:1.5})
     .bindPopup(`<b>${esc(p.shop)}</b><br>${esc(p.city)}<br>${fmtDate(p.date)} · stop ${i+1}`).addTo(_fleetMap); });
   _fleetMap.fitBounds(latlngs,{padding:[30,30],maxZoom:14});
 }

@@ -35,8 +35,8 @@ class LoginViewModel @Inject constructor(
 
     val profile: StateFlow<AppProfile> = profileStore.profile
 
-    // Profile filled → skip straight in (works for Google sign-in AND offline "continue without sign-in").
-    val canSkipLogin: Boolean get() = profileStore.profile.value.isComplete
+    // Sign-in is compulsory — only skip the login screen when a real Firebase session already exists.
+    val canSkipLogin: Boolean get() = authRepo.isSignedIn
 
     fun getSignInIntent(): Intent = authRepo.getSignInIntent()
 

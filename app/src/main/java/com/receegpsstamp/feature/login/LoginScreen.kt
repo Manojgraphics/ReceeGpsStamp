@@ -243,28 +243,12 @@ fun LoginScreen(
 
         Spacer(Modifier.height(12.dp))
         Text(
-            "Phone OTP or Google — either works. Sign-in is optional.",
+            "Sign in with your phone number or Google to continue.",
             fontSize = 11.sp, color = Color.White.copy(alpha = 0.3f), textAlign = TextAlign.Center, lineHeight = 16.sp,
             modifier = Modifier.fillMaxWidth(),
         )
 
         Spacer(Modifier.height(18.dp))
-        // Offline path — use the whole app without Google; sign in later from Settings → Account.
-        Box(
-            Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp))
-                .border(1.dp, BoxBorder, RoundedCornerShape(12.dp))
-                .clickable { showProfile = true }
-                .padding(vertical = 13.dp),
-            contentAlignment = Alignment.Center,
-        ) {
-            Text("Continue without sign-in", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = Color.White)
-        }
-        Text(
-            "Use the app offline. You can sign in later from Settings → Account.",
-            fontSize = 10.5.sp, color = Color.White.copy(alpha = 0.3f), textAlign = TextAlign.Center, lineHeight = 14.sp,
-            modifier = Modifier.fillMaxWidth().padding(top = 6.dp),
-        )
-
         Text(
             "v$versionName",
             fontSize = 10.sp, color = Color.White.copy(alpha = 0.3f), textAlign = TextAlign.Center,

@@ -354,7 +354,8 @@ function renderOverview(){
     conv=surveyed?Math.round(interested*100/surveyed):0, cov=stores?Math.round(surveyed*100/stores):0;
   const flagged=recces.filter(r=>!r.photos.length||!(r.lat&&r.lng));
   const noPhoto=recces.filter(r=>!r.photos.length).length, noGps=recces.filter(r=>!(r.lat&&r.lng)).length;
-  const inactive=DATA.surveyors.filter(s=>s.lastActive&&(Date.now()-s.lastActive)>=3*86400000).length;
+  const staleUsers=DATA.surveyors.filter(s=>s.lastActive&&(Date.now()-s.lastActive)>=3*86400000).sort((a,b)=>a.lastActive-b.lastActive);
+  const inactive=staleUsers.length;
   const exps=fExpenses(), advance=sum(exps.filter(x=>x.kind==="ADVANCE")), spent=sum(exps.filter(x=>x.kind==="EXPENSE"&&x.paymentMode!=="Company")), bal=advance-spent;
   const recent=recces.slice().sort((a,b)=>(b.date||0)-(a.date||0)).slice(0,6), C=2*Math.PI*26;
   const kpi=(ic,val,lbl,col)=>`<div style="background:rgba(255,255,255,.06);border-radius:11px;padding:10px 6px;text-align:center"><div style="color:${col};font-size:13px;font-weight:800">${ic}</div><div style="font-size:21px;font-weight:800;color:#fff;margin-top:2px">${val}</div><div style="font-size:9px;color:rgba(255,255,255,.55)">${lbl}</div></div>`;
@@ -370,6 +371,10 @@ function renderOverview(){
   const instByProj={}; iUnits.forEach(o=>{ const p=o.r.project||"—"; const g=instByProj[p]||(instByProj[p]={approved:0,installed:0}); if(o.i.approval==="Approved")g.approved++; if(o.fi&&o.fi.status==="Installed")g.installed++; });
   const totApproved=iUnits.filter(o=>o.i.approval==="Approved").length, totInstalled=iUnits.filter(o=>o.fi&&o.fi.status==="Installed").length;
   $("#overview").innerHTML=`
+    ${staleUsers.length?`<div style="background:#FBECEC;border:1px solid #E6A6A6;border-radius:12px;padding:11px 14px;margin-bottom:8px">
+      <div style="font-size:13px;font-weight:800;color:#9A2D2D">⚠ ${staleUsers.length} field user${staleUsers.length>1?'s':''} not backed up in 3+ days</div>
+      <div style="font-size:12px;color:#8A4A4A;margin-top:3px">${staleUsers.map(s=>`${esc(s.name)} (${ago(s.lastActive)})`).join(", ")} — ask them to open the app &amp; sign in so their data syncs to the cloud.</div>
+    </div>`:''}
     <div class="filters" style="justify-content:flex-end;margin-bottom:6px"><button class="btn y" id="ovPdf">📄 Weekly Report PDF</button></div>
     <div style="background:#1C1C1E;border-radius:16px;padding:16px;color:#fff;box-shadow:0 3px 12px rgba(0,0,0,.18)">
       <div style="display:flex;align-items:center;gap:10px">
@@ -435,7 +440,7 @@ function renderOverview(){
     </table></div>`:''}
     <div class="sec">BY FIELD USER — target = shops/week goal${ROLE==="admin"?" (tap to edit)":""} · tap name for details</div>
     <div class="tablewrap"><table>
-      <tr><th>Field User</th><th>Surveyed</th><th>Target / progress</th><th>Interested</th><th>Spent</th><th>Last active</th></tr>
+      <tr><th>Field User</th><th>Surveyed</th><th>Target / progress</th><th>Interested</th><th>Spent</th><th>Last synced</th></tr>
       ${surveyors.sort((a,b)=>b.surveyed-a.surveyed).map(s=>{ const stale=s.lastActive&&(Date.now()-s.lastActive)>=3*86400000;
         const tgt=TARGETS[s.uid]||0, pct=tgt?Math.min(100,Math.round(s.surveyed*100/tgt)):0;
         const tc=ROLE==="admin"?`<input type="number" min="0" value="${tgt||''}" data-uid="${esc(s.uid)}" class="tgtIn" placeholder="—" style="width:60px;padding:5px 7px;border:1px solid var(--line);border-radius:7px;font-size:12.5px">`:(tgt||'—');

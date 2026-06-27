@@ -913,44 +913,53 @@ async function getManagers(){ const d=await getDoc(accessRef()); return (d.exist
 async function setManagers(list){ await setDoc(accessRef(),{managers:list},{merge:true}); }
 async function getAdmins(){ const d=await getDoc(accessRef()); return (d.exists()&&d.data().admins)||[]; }
 async function setAdmins(list){ await setDoc(accessRef(),{admins:list},{merge:true}); }
+// Name from email: "sandeep.k@gmail.com" → "Sandeep K"
+function nameFromEmail(e){ const p=((e||"").split("@")[0]||"").replace(/[._-]+/g," ").trim(); return p.split(/\s+/).map(w=>w?w[0].toUpperCase()+w.slice(1):w).join(" ")||e; }
+function initials2(n){ return (n.split(/\s+/).filter(Boolean).slice(0,2).map(w=>w[0]).join("").toUpperCase())||"–"; }
 async function renderAccess(){
   $("#access").innerHTML=`
-    <div class="sec">ADMINS — full control (manage access, targets, disable logins, catalog)</div>
-    <div class="card">
-      <div class="filters"><input type="text" id="aEmail" placeholder="admin@gmail.com"><button class="btn y" id="aAdd">Add admin</button></div>
-      <div style="color:var(--soft);font-size:11px;margin:6px 0 4px">Owner${ADMIN_EMAILS.length>1?"s":""} (fixed, can't be removed): ${ADMIN_EMAILS.map(esc).join(", ")}</div>
-      <div id="aList" class="loading">Loading…</div>
+    <div style="display:flex;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:14px">
+      <div style="flex:1;min-width:140px"><div style="font-size:18px;font-weight:800">Managers</div><div style="font-size:12.5px;color:var(--soft)">Dashboard access &amp; audit</div></div>
     </div>
-    <div class="sec">MANAGERS — view all team data + approve / assign (no access control)</div>
-    <div class="card">
-      <div class="filters"><input type="text" id="mEmail" placeholder="manager@gmail.com"><button class="btn y" id="mAdd">Add manager</button></div>
-      <div id="mList" class="loading">Loading…</div>
+    <div class="card" style="padding:18px">
+      <div style="display:flex;align-items:center;margin-bottom:13px"><b style="font-size:14.5px">Who can see this dashboard</b><span style="margin-left:auto;font-size:11.5px;color:var(--soft);font-weight:600">Admin + manager allow-list</span></div>
+      <div id="acList"><div class="loading">Loading…</div></div>
+      <div style="display:flex;gap:8px;margin-top:14px;align-items:center;border-top:1px solid var(--line);padding-top:14px">
+        <input type="email" id="acEmail" placeholder="Add by Google email…" style="flex:1;min-width:160px">
+        <select id="acRole" style="min-width:120px"><option value="manager">Manager</option><option value="admin">Admin</option></select>
+        <button class="btn y" id="acAdd">+ Add</button>
+      </div>
     </div>
-    <div class="sec">AUDIT LOG — recent admin / manager actions</div>
-    <div id="auditList" class="card"><div class="loading">Loading…</div></div>`;
-  $("#aAdd").onclick=async()=>{ const v=($("#aEmail").value||"").trim().toLowerCase();
-    if(!v||!v.includes("@")){ alert("Enter a valid email"); return; }
-    if(ADMIN_EMAILS.includes(v)){ alert("Already an owner."); return; }
-    try{ const cur=await getAdmins(); if(!cur.includes(v)){ await setAdmins([...cur,v]); logAudit("admin","Added admin "+v); } $("#aEmail").value=""; drawAdmins(); }
-    catch(e){ alert("Could not save: "+(e.message||e)); } };
-  $("#mAdd").onclick=async()=>{ const v=($("#mEmail").value||"").trim().toLowerCase();
-    if(!v||!v.includes("@")){ alert("Enter a valid email"); return; }
-    try{ const cur=await getManagers(); if(!cur.includes(v)){ await setManagers([...cur,v]); logAudit("manager","Added manager "+v); } $("#mEmail").value=""; drawManagers(); }
-    catch(e){ alert("Could not save: "+(e.message||e)); } };
-  drawAdmins(); drawManagers(); drawAudit();
+    <div class="card" style="padding:18px;margin-top:14px">
+      <div style="display:flex;align-items:center;margin-bottom:11px"><b style="font-size:14.5px">Audit log</b><span style="margin-left:auto;font-size:11.5px;color:var(--soft);font-weight:600">Recent admin / manager actions</span></div>
+      <div id="auditList"><div class="loading">Loading…</div></div>
+    </div>`;
+  $("#acAdd").onclick=async()=>{
+    const v=($("#acEmail").value||"").trim().toLowerCase(); const role=$("#acRole").value;
+    if(!v||!v.includes("@")){ alert("Enter a valid Google email"); return; }
+    if(ADMIN_EMAILS.includes(v)){ alert("Already the owner."); return; }
+    try{
+      if(role==="admin"){ const cur=await getAdmins(); if(cur.includes(v)){ alert("Already an admin."); return; } const mgrs=await getManagers(); if(mgrs.includes(v)) await setManagers(mgrs.filter(x=>x!==v)); await setAdmins([...cur,v]); logAudit("access",`Added admin ${v}`); }
+      else { const cur=await getManagers(); if(cur.includes(v)){ alert("Already a manager."); return; } const adms=await getAdmins(); if(adms.includes(v)) await setAdmins(adms.filter(x=>x!==v)); await setManagers([...cur,v]); logAudit("access",`Added manager ${v}`); }
+      $("#acEmail").value=""; drawAccess();
+    }catch(e){ alert("Could not save: "+(e.message||e)); }
+  };
+  drawAccess(); drawAudit();
 }
-async function drawAdmins(){
-  const el=$("#aList"); let list=[]; try{ list=await getAdmins(); }catch(e){ el.innerHTML="Error loading."; return; }
-  el.innerHTML = list.length ? list.map(e=>`<div style="display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid var(--line)"><span style="flex:1">${esc(e)}</span><button class="btn aDel" data-e="${esc(e)}" style="background:#fdecec;color:#a3302a">Remove</button></div>`).join("")
-    : `<div style="color:var(--soft);font-size:13px;padding:8px 0">No added admins yet — only the owner above.</div>`;
-  el.querySelectorAll(".aDel").forEach(b=>b.onclick=async()=>{ if(!confirm("Remove admin "+b.dataset.e+"? They lose all admin access.")) return; try{ const cur=await getAdmins(); await setAdmins(cur.filter(x=>x!==b.dataset.e)); logAudit("admin","Removed admin "+b.dataset.e); drawAdmins(); }catch(e){ alert("Could not remove: "+(e.message||e)); } });
-}
-async function drawManagers(){
-  const el=$("#mList"); let list=[]; try{ list=await getManagers(); }catch(e){ el.innerHTML="Error loading."; return; }
-  el.innerHTML = list.length ? list.map(e=>`<div style="display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid var(--line)">
-      <span style="flex:1">${esc(e)}</span><button class="btn" data-e="${esc(e)}" style="background:#fdecec;color:#a3302a">Remove</button></div>`).join("")
-    : `<div style="color:var(--soft);font-size:13px;padding:8px 0">No managers yet. Add one above.</div>`;
-  el.querySelectorAll("button[data-e]").forEach(b=>b.onclick=async()=>{ try{ const cur=await getManagers(); await setManagers(cur.filter(x=>x!==b.dataset.e)); logAudit("manager","Removed manager "+b.dataset.e); drawManagers(); }catch(e){ alert("Could not remove: "+(e.message||e)); } });
+async function drawAccess(){
+  const el=$("#acList"); if(!el) return;
+  let admins=[], managers=[];
+  try{ admins=await getAdmins(); managers=await getManagers(); }catch(e){ el.innerHTML="Error loading."; return; }
+  const row=(email,role,locked)=>{ const name=nameFromEmail(email); const pillBg=locked?"#1B1B1B":role==="admin"?"#FFC400":"#FFF6DC"; const pillFg=locked?"#FFC400":role==="admin"?"#1B1B1B":"#B8890C"; const pillTxt=locked?"Admin · locked":role==="admin"?"Admin":"Manager";
+    return `<div style="display:flex;align-items:center;gap:12px;padding:11px 0;border-bottom:1px solid var(--line)">
+      <div style="width:38px;height:38px;border-radius:50%;background:var(--brand);color:#1a1a1a;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:13px;flex:0 0 auto">${esc(initials2(name))}</div>
+      <div style="flex:1;min-width:0"><div style="font-weight:800;font-size:13.5px">${esc(name)}</div><div style="font-size:11.5px;color:var(--soft);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(email)}</div></div>
+      <span style="background:${pillBg};color:${pillFg};border-radius:50px;padding:4px 11px;font-size:11px;font-weight:800">${pillTxt}</span>
+      ${locked?"":`<span class="acDel" data-e="${esc(email)}" data-r="${role}" style="color:var(--danger);font-size:12.5px;font-weight:700;cursor:pointer;margin-left:2px">Remove</span>`}
+    </div>`; };
+  const html = ADMIN_EMAILS.map(e=>row(e,"admin",true)).join("") + admins.map(e=>row(e,"admin",false)).join("") + managers.map(e=>row(e,"manager",false)).join("");
+  el.innerHTML = html || `<div style="color:var(--soft);font-size:13px;padding:8px 0">Only the owner has access. Add a manager below.</div>`;
+  el.querySelectorAll(".acDel").forEach(b=>b.onclick=async()=>{ const e=b.dataset.e, r=b.dataset.r; if(!confirm(`Remove ${r} ${e}? They lose access to this dashboard.`))return; try{ if(r==="admin"){ const cur=await getAdmins(); await setAdmins(cur.filter(x=>x!==e)); logAudit("access",`Removed admin ${e}`); } else { const cur=await getManagers(); await setManagers(cur.filter(x=>x!==e)); logAudit("access",`Removed manager ${e}`); } drawAccess(); }catch(err){ alert("Could not remove: "+(err.message||err)); } });
 }
 
 // ── Targets & Audit log ──
@@ -965,14 +974,22 @@ async function saveTarget(uid,val){
 async function logAudit(action,detail){
   try{ await addDoc(collection(db,"audit"),{by:(auth.currentUser&&auth.currentUser.email)||"",action,detail,at:Date.now()}); }catch(e){}
 }
+function actionIcon(a){ return {access:"👤",admin:"👤",manager:"👤",hidden:"🚫",target:"🎯",assign:"📌",setup:"⚙️",approval:"✓",vehicle:"🚗"}[a]||"📝"; }
+function timeAgo(ms){ if(!ms)return ""; const s=Math.floor((Date.now()-ms)/1000); if(s<60)return "just now"; const m=Math.floor(s/60); if(m<60)return m+" min ago"; const h=Math.floor(m/60); if(h<24)return h+" hr ago"; const d=Math.floor(h/24); if(d===1)return "1 day ago"; if(d<30)return d+" days ago"; const mo=Math.floor(d/30); return mo===1?"1 month ago":mo+" months ago"; }
 async function drawAudit(){
   const el=$("#auditList"); if(!el) return;
   try{ const snap=await getDocs(query(collection(db,"audit"),orderBy("at","desc"),limit(40)));
     const rows=snap.docs.map(d=>d.data());
-    el.innerHTML = rows.length ? rows.map(a=>`<div style="padding:8px 0;border-bottom:1px solid var(--line);font-size:12.5px">
-      <b>${esc(a.detail||a.action)}</b><br><span style="color:var(--soft);font-size:11px">${esc(a.by)} · ${fmtDate(a.at)} ${new Date(a.at).toLocaleTimeString("en-IN",{hour:'2-digit',minute:'2-digit'})}</span></div>`).join("")
-      : `<div class="loading">No actions logged yet.</div>`;
-  }catch(e){ el.innerHTML=`<div class="loading">Audit unavailable: ${esc(e.message||e)}</div>`; }
+    el.innerHTML = rows.length ? rows.map((a,i)=>`<div style="display:flex;align-items:flex-start;gap:11px;padding:11px 0${i<rows.length-1?";border-bottom:1px solid var(--line)":""}">
+      <div style="width:34px;height:34px;border-radius:9px;background:var(--bg);display:flex;align-items:center;justify-content:center;font-size:15px;flex:0 0 auto">${actionIcon(a.action)}</div>
+      <div style="flex:1;min-width:0">
+        <div style="font-weight:700;font-size:13px">${esc(a.detail||a.action)}</div>
+        <div style="font-size:11px;color:var(--soft);margin-top:2px">${a.by?"by "+esc(nameFromEmail(a.by)):""}</div>
+      </div>
+      <div style="font-size:11px;color:var(--soft);white-space:nowrap;flex:0 0 auto" title="${esc(fmtDate(a.at)+" "+new Date(a.at).toLocaleTimeString("en-IN",{hour:'2-digit',minute:'2-digit'}))}">${timeAgo(a.at)}</div>
+    </div>`).join("")
+      : `<div style="color:var(--soft);font-size:13px;padding:8px 0">No actions logged yet.</div>`;
+  }catch(e){ el.innerHTML=`<div style="color:var(--soft);font-size:13px;padding:8px 0">Audit unavailable: ${esc(e.message||e)}</div>`; }
 }
 
 // ── Expense approvals ──

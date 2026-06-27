@@ -140,7 +140,12 @@ class LocalStore @Inject constructor(
         val safe = normalize(parsed)
         // Seeding must never take down startup — fall back to the parsed data if it throws.
         val seeded = runCatching { seed(safe) }.getOrDefault(safe)
-        val next = seeded.copy(schemaVersion = SCHEMA_VERSION)
+        // Collapse companies that duplicated across devices (random seed ids + merge-by-id catalog).
+        val deduped = runCatching {
+            val r = CatalogDedupe.dedupe(seeded.companies, seeded.distributors)
+            seeded.copy(companies = r.companies, distributors = r.distributors)
+        }.getOrDefault(seeded)
+        val next = deduped.copy(schemaVersion = SCHEMA_VERSION)
         if (next != parsed) persist(next)   // first run, seeding, recovery, null-fix, or a version bump
         return next
     }
@@ -298,8 +303,11 @@ class LocalStore @Inject constructor(
 
     /** Replaces the shared project catalog (companies + distributors w/ creatives & media). */
     fun setCatalog(companies: List<Company>, distributors: List<Distributor>) {
-        if (db.value.companies == companies && db.value.distributors == distributors) return
-        mutate { it.copy(companies = companies, distributors = distributors) }
+        // Dedupe here too — the catalog merge unions by id, so same-named seed companies (random
+        // per-device ids) would otherwise land as duplicates the moment we pull.
+        val r = CatalogDedupe.dedupe(companies, distributors)
+        if (db.value.companies == r.companies && db.value.distributors == r.distributors) return
+        mutate { it.copy(companies = r.companies, distributors = r.distributors) }
     }
 
     /** Applies admin-pushed project setups: find-or-create company (merge creatives/media) + distributor (city/contact). */

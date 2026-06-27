@@ -352,7 +352,7 @@ private fun CurrentProjectCard(companyName: String, distributorName: String, cre
             ) {
                 Icon(RgsIcons.Settings, null, tint = Color.Black, modifier = Modifier.size(15.dp))
                 Spacer(Modifier.width(5.dp))
-                Text("Project Setup", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color.Black)
+                Text("Select project", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color.Black)
             }
         }
     }

@@ -130,7 +130,7 @@ fun FleetScreen(
                 onOpenMaintenance = { maintenanceId = selected.id },
                 onDeleteFuel = onDeleteFuel,
             )
-            else -> FleetList(vehicles, fuelLogs, onOpen = { selectedId = it.id })
+            else -> FleetList(vehicles, fuelLogs, onOpen = { selectedId = it.id }, onQuickFuel = { fuelFor = it })
         }
     }
 
@@ -140,7 +140,7 @@ fun FleetScreen(
 
 // ── List ──
 @Composable
-private fun FleetList(vehicles: List<Vehicle>, fuelLogs: List<FuelLog>, onOpen: (Vehicle) -> Unit) {
+private fun FleetList(vehicles: List<Vehicle>, fuelLogs: List<FuelLog>, onOpen: (Vehicle) -> Unit, onQuickFuel: (Vehicle) -> Unit) {
     val allAlerts = vehicles.flatMap { v -> alertsOf(v, statusOf(v, fuelLogs.filter { it.vehicleId == v.id })) }
     LazyColumn(Modifier.fillMaxSize().padding(horizontal = 12.dp)) {
         if (allAlerts.isNotEmpty()) {
@@ -160,12 +160,12 @@ private fun FleetList(vehicles: List<Vehicle>, fuelLogs: List<FuelLog>, onOpen: 
                 )
             }
         }
-        items(vehicles, key = { it.id }) { v -> VehicleCard(v, fuelLogs.filter { it.vehicleId == v.id }) { onOpen(v) } }
+        items(vehicles, key = { it.id }) { v -> VehicleCard(v, fuelLogs.filter { it.vehicleId == v.id }, onClick = { onOpen(v) }, onQuickFuel = { onQuickFuel(v) }) }
     }
 }
 
 @Composable
-private fun VehicleCard(v: Vehicle, fuel: List<FuelLog>, onClick: () -> Unit) {
+private fun VehicleCard(v: Vehicle, fuel: List<FuelLog>, onClick: () -> Unit, onQuickFuel: () -> Unit) {
     val st = statusOf(v, fuel)
     val alerts = alertsOf(v, st)
     RgsCard(Modifier.fillMaxWidth().padding(top = 10.dp).clickable { onClick() }) {
@@ -186,6 +186,15 @@ private fun VehicleCard(v: Vehicle, fuel: List<FuelLog>, onClick: () -> Unit) {
         if (alerts.isNotEmpty()) {
             Spacer(Modifier.height(8.dp))
             alerts.take(2).forEach { Text("⚠ $it", fontSize = 11.5.sp, color = StatusError) }
+        }
+        // Quick "⛽ Add fuel" — one-tap from list (no need to open detail first).
+        Spacer(Modifier.height(10.dp))
+        Box(
+            Modifier.fillMaxWidth().clip(RoundedCornerShape(11.dp)).background(BrandGradient)
+                .clickable(onClick = onQuickFuel).padding(vertical = 11.dp),
+            contentAlignment = Alignment.Center,
+        ) {
+            Text("⛽  Add fuel", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = Color.Black)
         }
     }
 }

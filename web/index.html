@@ -1019,6 +1019,7 @@ async function renderFleet(){
   const ymShort=e=>{ const d=new Date(e); return d.toLocaleDateString("en-IN",{month:"short"})+" '"+String(d.getFullYear()).slice(-2); };
   const docPill=(lbl,e,need)=>{ if(need===false) return `<span class="pill" style="background:var(--line);color:var(--soft)">${lbl} n/a</span>`; if(!(e>0)) return `<span class="pill" style="background:var(--line);color:var(--soft)">${lbl} —</span>`; const x=Math.floor((e-Date.now())/86400000); return x<0?`<span class="pill" style="background:#FBEAE5;color:var(--danger)">${lbl} ✗ expired</span>`:`<span class="pill" style="background:#FFF6DC;color:var(--brand-d)">${lbl} ✓ ${ymShort(e)}</span>`; };
   const svcLine=v=>{ const km=v.currentKm||0; let best=null; (v.maintItems||[]).forEach(mi=>{ if(mi.lastKm>0&&mi.intervalKm>0){ const rem=mi.lastKm+mi.intervalKm-km; if(best===null||rem<best.rem) best={name:mi.name,rem}; } }); if(!best) return `<span style="color:var(--soft)">🔧 No service interval set</span>`; if(best.rem<=0) return `<span style="color:var(--danger)">🔧 ${esc(best.name)} overdue <b>${-best.rem} km</b></span>`; return `<span style="color:var(--soft)">🔧 ${esc(best.name)} in <b>${best.rem.toLocaleString("en-IN")} km</b></span>`; };
+  const lastFuelLine=v=>{ const logs=(v.fuelLogs||[]).slice().sort((a,b)=>(b.date||0)-(a.date||0)); if(!logs.length) return `<span style="color:var(--soft)">⛽ No fuel logs yet</span>`; const f=logs[0]; const rate=f.ratePerLitre||(f.litres?(f.amount||0)/f.litres:0); return `<span style="color:var(--soft)">⛽ <b style="color:var(--ink)">${(f.litres||0).toFixed(2)} L</b> · <b style="color:var(--ink)">${money(f.amount||0)}</b>${rate?` @ ₹${rate.toFixed(2)}`:""} · ${fmtDate(f.date)}</span>`; };
   const typeIc=t=>t==="Bike"?"🏍️":(t==="Transport vehicle"||t==="Transport")?"🚚":"🚗";
   $("#fleet").innerHTML=`
     <div style="display:flex;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:14px">
@@ -1041,7 +1042,8 @@ async function renderFleet(){
             <div style="text-align:right;flex:0 0 auto"><div style="font-weight:800;font-size:15px">${(tm||ec)?(tm||ec).toFixed(0):"—"} <span style="font-size:10px;color:var(--soft)">km/l</span></div><div style="font-size:10.5px;color:var(--soft)">${(v.currentKm||0).toLocaleString("en-IN")} km</div></div>
           </div>
           <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:11px">${docPill("INS",v.insuranceExpiry)}${docPill("PUC",v.pucExpiry)}${docPill("FIT",v.fitnessExpiry,typeNeedsFitness(v.type))}</div>
-          <div style="border-top:1px solid var(--line);margin-top:11px;padding-top:9px;font-size:12px">${svcLine(v)}</div>
+          <div style="border-top:1px solid var(--line);margin-top:11px;padding-top:9px;font-size:12px">${lastFuelLine(v)}</div>
+          <div style="margin-top:5px;font-size:12px">${svcLine(v)}</div>
           <div style="display:flex;gap:7px;margin-top:11px"><button class="btn y vQFuel" data-id="${esc(v.id)}" style="flex:1;padding:7px;font-size:12px">⛽ Fuel</button><button class="btn vQSvc" data-id="${esc(v.id)}" style="flex:1;padding:7px;font-size:12px">🔧 Service</button></div>
         </div>`; }).join("")}
     </div>

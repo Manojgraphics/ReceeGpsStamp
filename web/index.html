@@ -519,21 +519,60 @@ function renderOverview(){
 }
 
 // ── Leaderboard ──
+let _lbMetric="recces";
 function renderLeaderboard(){
-  const list=fSurveyorsVisible().filter(s=>s.surveyed>0||TARGETS[s.uid]).sort((a,b)=>b.surveyed-a.surveyed||b.interested-a.interested);
-  const medal=["🥇","🥈","🥉"];
+  // Per-user install count (Installed status from app installs)
+  const insCount={}; installUnits(DATA.recces||[]).forEach(o=>{ if(o.fi&&o.fi.status==="Installed"){ const uid=o.r.uid; insCount[uid]=(insCount[uid]||0)+1; } });
+  const rows=fSurveyorsVisible().map(s=>({...s,installs:insCount[s.uid]||0,conv:s.surveyed?Math.round(s.interested*100/s.surveyed):0,target:TARGETS[s.uid]||0,tgtPct:TARGETS[s.uid]?Math.min(100,Math.round(s.surveyed*100/TARGETS[s.uid])):0})).filter(s=>s.surveyed>0||s.installs>0||s.target>0);
+  const sorter = _lbMetric==="conv" ? (a,b)=>(b.surveyed>=5?b.conv:-1)-(a.surveyed>=5?a.conv:-1)||b.interested-a.interested
+                : _lbMetric==="installs" ? (a,b)=>b.installs-a.installs||b.surveyed-a.surveyed
+                : (a,b)=>b.surveyed-a.surveyed||b.interested-a.interested;
+  const list=rows.slice().sort(sorter);
+  const top=list.slice(0,3), rest=list.slice(3);
+  const today=new Date(); today.setHours(0,0,0,0);
+  const badges=s=>{ const b=[]; if(s.target && s.surveyed>=s.target) b.push(`<span title="Target met" style="background:#E8F5EC;color:#1B873F;border-radius:50px;padding:2px 8px;font-size:10px;font-weight:800">🎯 Target met</span>`); if(s.surveyed>=5 && s.conv>=50) b.push(`<span title="High converter (50%+)" style="background:#FFF6DC;color:var(--brand-d);border-radius:50px;padding:2px 8px;font-size:10px;font-weight:800">🔥 Hot</span>`); if(s.lastActive && s.lastActive>=today.getTime()) b.push(`<span title="Active today" style="background:#E0F2FF;color:#0858A3;border-radius:50px;padding:2px 8px;font-size:10px;font-weight:800">⚡ Today</span>`); return b.join(" "); };
+  const initials=n=>(n.split(/\s+/).filter(Boolean).slice(0,2).map(w=>w[0]).join("").toUpperCase())||"–";
+  const metricLabel=_lbMetric==="conv"?"Conversion":_lbMetric==="installs"?"Installs":"Surveyed";
+  const metricVal=s=>_lbMetric==="conv"?(s.conv+"%"):_lbMetric==="installs"?String(s.installs):String(s.surveyed);
+  const podiumStyles=[{h:180,bg:"linear-gradient(135deg,#FFC400,#E6A91E)",ic:"🥇",lbl:"GOLD",fg:"#1a1a1a"},{h:152,bg:"linear-gradient(135deg,#D1D5DB,#9CA3AF)",ic:"🥈",lbl:"SILVER",fg:"#1a1a1a"},{h:128,bg:"linear-gradient(135deg,#E6B07B,#B8845A)",ic:"🥉",lbl:"BRONZE",fg:"#fff"}];
+  // visual podium order — silver / gold / bronze (gold in the middle)
+  const order=[1,0,2];
+  const tab=(k,l)=>`<button class="lbTab" data-m="${k}" style="background:${_lbMetric===k?'var(--brand)':'transparent'};color:${_lbMetric===k?'var(--brand-text)':'var(--soft)'};border-radius:50px;padding:6px 16px;font-size:13px;font-weight:700;cursor:pointer;border:none">${l}</button>`;
   $("#leaderboard").innerHTML=`
-    ${perfSubnav('leaderboard')}
-    <div class="sec">🏆 LEADERBOARD ${RANGE.label!=="All time"?"· "+esc(RANGE.label):"· all time"}</div>
-    ${list.length?`<div class="tablewrap"><table>
-      <tr><th>#</th><th>Field User</th><th>Surveyed</th><th>Interested</th><th>Conversion</th><th>Target</th></tr>
-      ${list.map((s,i)=>{ const conv=s.surveyed?Math.round(s.interested*100/s.surveyed):0, tgt=TARGETS[s.uid]||0, pct=tgt?Math.min(100,Math.round(s.surveyed*100/tgt)):0;
-        return `<tr><td style="font-size:16px">${medal[i]||(i+1)}</td>
-        <td class="wrap"><b class="suLink" data-uid="${esc(s.uid)}" style="color:var(--amber);cursor:pointer">${esc(s.name)}</b></td>
-        <td><b>${s.surveyed}</b></td><td>${s.interested}</td><td>${conv}%</td><td>${tgt?pct+"% of "+tgt:'—'}</td></tr>`; }).join("")}
-    </table></div>`:`<div class="card loading">No survey activity in this period.</div>`}`;
+    <div style="display:flex;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:14px">
+      <div style="flex:1;min-width:140px"><div style="font-size:18px;font-weight:800">🏆 Leaderboard</div><div style="font-size:12.5px;color:var(--soft)">Top field users · ${esc(RANGE.label)}</div></div>
+      <div class="filters" style="gap:4px;background:var(--bg);border-radius:50px;padding:3px">${tab("recces","Surveyed")}${tab("conv","Conversion")}${tab("installs","Installs")}</div>
+    </div>
+    ${list.length?`
+    <div class="card" style="padding:18px;background:linear-gradient(180deg,var(--card) 0%,var(--bg) 100%)">
+      <div style="display:flex;align-items:flex-end;justify-content:center;gap:14px;flex-wrap:wrap;min-height:200px">
+        ${order.map(rank=>{ const s=top[rank]; if(!s) return ""; const st=podiumStyles[rank];
+          return `<div style="text-align:center;width:160px"><div style="display:flex;flex-direction:column;align-items:center"><div style="width:60px;height:60px;border-radius:50%;background:var(--dark);color:#fff;display:flex;align-items:center;justify-content:center;font-size:18px;font-weight:800;border:3px solid ${rank===0?'#FFC400':rank===1?'#9CA3AF':'#B8845A'};margin-bottom:-30px;z-index:2">${esc(initials(s.name))}</div></div>
+            <div class="lbPodium" data-uid="${esc(s.uid)}" style="background:${st.bg};color:${st.fg};border-radius:14px;padding:38px 12px 14px;height:${st.h}px;display:flex;flex-direction:column;justify-content:flex-end;cursor:pointer;box-shadow:0 3px 10px rgba(0,0,0,.1)">
+              <div style="font-size:22px;line-height:1">${st.ic}</div>
+              <div style="font-size:9.5px;letter-spacing:1px;opacity:.8;margin-top:3px">${st.lbl}</div>
+              <div style="font-weight:800;font-size:14px;margin-top:8px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(s.name)}</div>
+              <div style="font-size:23px;font-weight:800;margin-top:4px">${metricVal(s)}</div>
+              <div style="font-size:10px;opacity:.75;margin-top:1px">${esc(metricLabel)}</div>
+            </div></div>`; }).join("")}
+      </div>
+    </div>
+    <div class="card" style="padding:0;margin-top:14px;overflow:hidden">
+      <div class="tablewrap"><table>
+        <tr><th>#</th><th>Field User</th><th>Surveyed</th><th>Interested</th><th>Conv</th><th>Installs</th><th>Target</th><th>Last sync</th></tr>
+        ${list.map((s,i)=>{ const stale=s.lastActive&&(Date.now()-s.lastActive)>=3*86400000; const ms=s.lastActive?Math.floor((Date.now()-s.lastActive)/86400000):null;
+          return `<tr style="${i<3?'background:rgba(255,196,0,.04)':''}"><td style="font-weight:800;color:${i<3?'var(--brand-d)':'var(--soft)'}">${i+1}</td>
+            <td class="wrap"><div style="display:flex;align-items:center;gap:8px"><div style="width:28px;height:28px;border-radius:50%;background:var(--dark);color:#fff;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:800;flex:0 0 auto">${esc(initials(s.name))}</div><div style="min-width:0"><b class="suLink" data-uid="${esc(s.uid)}" style="color:var(--brand-d);cursor:pointer">${esc(s.name)}</b>${s.mobile?`<br><span style="font-size:11px;color:var(--soft)">${esc(s.mobile)}</span>`:""} <div style="margin-top:3px">${badges(s)}</div></div></div></td>
+            <td><b>${s.surveyed}</b></td><td>${s.interested}</td>
+            <td>${s.surveyed?s.conv+"%":"—"}</td>
+            <td>${s.installs||"—"}</td>
+            <td style="min-width:110px">${s.target?`<div style="font-size:11px;font-weight:700">${s.tgtPct}% <span style="color:var(--soft);font-weight:400">of ${s.target}</span></div><div class="bar" style="margin-top:3px;height:5px"><i style="width:${s.tgtPct}%"></i></div>`:'<span style="color:var(--soft)">—</span>'}</td>
+            <td>${s.lastActive?`<span style="color:${stale?'var(--danger)':'var(--soft)'};font-size:12px">${ms===0?"today":ms===1?"1d ago":ms+"d ago"}${stale?" ⚠":""}</span>`:'<span style="color:var(--soft)">never</span>'}</td></tr>`; }).join("")}
+      </table></div>
+    </div>`:`<div class="card loading">No survey activity in this period.</div>`}`;
   document.querySelectorAll("#leaderboard .suLink").forEach(b=>b.onclick=()=>openSurveyor(b.dataset.uid));
-  wirePF();
+  document.querySelectorAll("#leaderboard .lbPodium").forEach(b=>b.onclick=()=>openSurveyor(b.dataset.uid));
+  document.querySelectorAll("#leaderboard .lbTab").forEach(b=>b.onclick=()=>{ _lbMetric=b.dataset.m; renderLeaderboard(); });
 }
 
 // ── Surveyor detail (modal) ──

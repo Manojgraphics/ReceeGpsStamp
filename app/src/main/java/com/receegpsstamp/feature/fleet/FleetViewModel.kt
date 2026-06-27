@@ -8,7 +8,6 @@ import com.receegpsstamp.data.location.LocationProvider
 import com.receegpsstamp.data.model.FuelLog
 import com.receegpsstamp.data.model.ServiceLog
 import com.receegpsstamp.data.model.Vehicle
-import com.receegpsstamp.data.sync.FirestoreSync
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -33,7 +32,6 @@ data class FleetUiState(
 class FleetViewModel @Inject constructor(
     private val localStore: LocalStore,
     private val locationProvider: LocationProvider,
-    private val firestoreSync: FirestoreSync,
     private val authRepo: AuthRepository,
 ) : ViewModel() {
 
@@ -43,8 +41,6 @@ class FleetViewModel @Inject constructor(
 
     private val userId: String get() = authRepo.currentUser?.uid ?: "local"
 
-    fun updateVehicle(v: Vehicle) { localStore.updateVehicle(v) }
-    fun deleteVehicle(id: String) { localStore.deleteVehicle(id); firestoreSync.deleteSharedVehicle(id) }
     fun addFuelLog(f: FuelLog) { localStore.addFuelLog(f.copy(userId = userId)); stampVehicleLocation(f.vehicleId) }
     fun deleteFuelLog(id: String) { localStore.deleteFuelLog(id) }
     fun addServiceLog(s: ServiceLog) { localStore.addServiceLog(s.copy(userId = userId)); stampVehicleLocation(s.vehicleId) }

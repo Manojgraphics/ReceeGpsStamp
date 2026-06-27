@@ -170,8 +170,6 @@ fun MainNavHost() {
                 vehicles = flState.vehicles,
                 fuelLogs = flState.fuelLogs,
                 serviceLogs = flState.serviceLogs,
-                onUpdateVehicle = { flVm.updateVehicle(it) },
-                onDeleteVehicle = { flVm.deleteVehicle(it) },
                 onAddFuel = { flVm.addFuelLog(it) },
                 onDeleteFuel = { flVm.deleteFuelLog(it) },
                 onAddService = { flVm.addServiceLog(it) },

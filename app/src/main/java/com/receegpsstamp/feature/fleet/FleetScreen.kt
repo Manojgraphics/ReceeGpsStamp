@@ -31,16 +31,12 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.DirectionsCar
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.DatePicker
-import androidx.compose.material3.DatePickerDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.rememberDatePickerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -54,7 +50,6 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.receegpsstamp.data.model.FuelLog
-import com.receegpsstamp.data.model.MaintItem
 import com.receegpsstamp.data.model.ServiceLog
 import com.receegpsstamp.data.model.Vehicle
 import com.receegpsstamp.ui.components.RgsCard
@@ -74,12 +69,6 @@ import java.util.Locale
 
 private val dateFmt = SimpleDateFormat("dd MMM yyyy", Locale.getDefault())
 private fun money(v: Double) = "₹" + "%,.0f".format(v)
-private val VEHICLE_TYPES = listOf("Bike", "Car", "Transport vehicle", "Other")
-private val DEFAULT_MAINT = listOf(
-    MaintItem("Oil change", 3000), MaintItem("Service", 5000), MaintItem("Wheel alignment", 5000),
-    MaintItem("Brake", 10000), MaintItem("Clutch", 20000), MaintItem("Coolant", 20000),
-    MaintItem("Battery", 15000), MaintItem("Tyre", 30000),
-)
 private val WarnAmber = Color(0xFF8A6D00)
 
 // Status / economy / alert math lives in FleetMath.kt (extracted for unit testing — see FleetMathTest).
@@ -89,8 +78,6 @@ fun FleetScreen(
     vehicles: List<Vehicle>,
     fuelLogs: List<FuelLog>,
     serviceLogs: List<ServiceLog>,
-    onUpdateVehicle: (Vehicle) -> Unit,
-    onDeleteVehicle: (String) -> Unit,
     onAddFuel: (FuelLog) -> Unit,
     onDeleteFuel: (String) -> Unit,
     onAddService: (ServiceLog) -> Unit,
@@ -102,8 +89,6 @@ fun FleetScreen(
 
     var fuelFor by remember { mutableStateOf<Vehicle?>(null) }
     var svcFor by remember { mutableStateOf<Vehicle?>(null) }
-    var editVeh by remember { mutableStateOf<Vehicle?>(null) }
-    var delVeh by remember { mutableStateOf<Vehicle?>(null) }
 
     BackHandler(enabled = selected != null) { selectedId = null }
 
@@ -120,24 +105,13 @@ fun FleetScreen(
                 fuelLogs.filter { it.vehicleId == selected.id },
                 serviceLogs.filter { it.vehicleId == selected.id },
                 onFuel = { fuelFor = selected }, onService = { svcFor = selected },
-                onEdit = { editVeh = selected }, onDelete = { delVeh = selected },
                 onDeleteFuel = onDeleteFuel, onDeleteService = onDeleteService,
             )
         }
     }
 
-    editVeh?.let { v -> VehicleDialog(v, { editVeh = null }) { onUpdateVehicle(it); editVeh = null } }
     fuelFor?.let { v -> FuelDialog(v, { fuelFor = null }) { onAddFuel(it); fuelFor = null } }
     svcFor?.let { v -> ServiceDialog(v, { svcFor = null }) { onAddService(it); svcFor = null } }
-    delVeh?.let { v ->
-        AlertDialog(
-            onDismissRequest = { delVeh = null },
-            title = { Text("Delete ${v.name.ifBlank { v.number }}?") },
-            text = { Text("The vehicle and all its fuel & service logs will be removed.") },
-            confirmButton = { TextButton(onClick = { onDeleteVehicle(v.id); delVeh = null; selectedId = null }) { Text("Delete", color = StatusError) } },
-            dismissButton = { TextButton(onClick = { delVeh = null }) { Text("Cancel") } },
-        )
-    }
 }
 
 // ── List ──
@@ -196,7 +170,7 @@ private fun VehicleCard(v: Vehicle, fuel: List<FuelLog>, onClick: () -> Unit) {
 @Composable
 private fun VehicleDetail(
     v: Vehicle, fuel: List<FuelLog>, service: List<ServiceLog>,
-    onFuel: () -> Unit, onService: () -> Unit, onEdit: () -> Unit, onDelete: () -> Unit,
+    onFuel: () -> Unit, onService: () -> Unit,
     onDeleteFuel: (String) -> Unit, onDeleteService: (String) -> Unit,
 ) {
     val st = statusOf(v, fuel)
@@ -222,11 +196,6 @@ private fun VehicleDetail(
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             FleetBtn("⛽ Add fuel", Modifier.weight(1f), filled = true, onFuel)
             FleetBtn("🔧 Add service", Modifier.weight(1f), filled = false, onService)
-        }
-        Spacer(Modifier.height(8.dp))
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            FleetBtn("Edit vehicle", Modifier.weight(1f), filled = false, onEdit)
-            FleetBtn("Delete", Modifier.weight(1f), filled = false, onDelete)
         }
 
         if (fuel.isNotEmpty()) {
@@ -332,19 +301,6 @@ private fun Field(label: String, value: String, onChange: (String) -> Unit, nume
 }
 
 @Composable
-private fun ChipPick(options: List<String>, selected: String, onPick: (String) -> Unit) {
-    Row(Modifier.fillMaxWidth().padding(vertical = 4.dp), horizontalArrangement = Arrangement.spacedBy(7.dp)) {
-        options.forEach { o ->
-            val on = o == selected
-            Box(
-                Modifier.weight(1f).clip(RoundedCornerShape(9.dp)).background(if (on) BrandGradient else SolidColor(NeutralSurfaceV)).clickable { onPick(o) }.padding(vertical = 9.dp),
-                contentAlignment = Alignment.Center,
-            ) { Text(o, fontSize = 11.5.sp, fontWeight = FontWeight.Bold, color = if (on) Color.Black else NeutralTextSoft) }
-        }
-    }
-}
-
-@Composable
 private fun TypePicker(options: List<String>, selected: String, onPick: (String) -> Unit) {
     FlowRow(
         Modifier.fillMaxWidth().padding(vertical = 4.dp),
@@ -357,77 +313,6 @@ private fun TypePicker(options: List<String>, selected: String, onPick: (String)
             ) { Text(o, fontSize = 12.sp, fontWeight = FontWeight.Bold, color = if (on) Color.Black else NeutralTextSoft) }
         }
     }
-}
-
-@Composable
-private fun DateField(label: String, value: Long, onPick: (Long) -> Unit) {
-    var open by remember { mutableStateOf(false) }
-    Column(Modifier.padding(vertical = 4.dp)) {
-        Text(label, fontSize = 11.sp, color = NeutralTextSoft)
-        Box(
-            Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).background(NeutralSurfaceV).clickable { open = true }.padding(13.dp),
-        ) { Text(if (value > 0) dateFmt.format(Date(value)) else "Not set — tap to pick", fontSize = 14.sp, color = if (value > 0) NeutralText else NeutralTextSoft) }
-    }
-    if (open) {
-        val dps = rememberDatePickerState(initialSelectedDateMillis = if (value > 0) value else System.currentTimeMillis())
-        DatePickerDialog(
-            onDismissRequest = { open = false },
-            confirmButton = { TextButton(onClick = { dps.selectedDateMillis?.let(onPick); open = false }) { Text("OK") } },
-            dismissButton = { TextButton(onClick = { open = false }) { Text("Cancel") } },
-        ) { DatePicker(state = dps) }
-    }
-}
-
-@Composable
-private fun VehicleDialog(existing: Vehicle?, onDismiss: () -> Unit, onSave: (Vehicle) -> Unit) {
-    var number by remember { mutableStateOf(existing?.number ?: "") }
-    var name by remember { mutableStateOf(existing?.name ?: "") }
-    var model by remember { mutableStateOf(existing?.model ?: "") }
-    var type by remember { mutableStateOf(existing?.type ?: "Bike") }
-    var km by remember { mutableStateOf(existing?.currentKm?.takeIf { it > 0 }?.toString() ?: "") }
-    val baseItems = remember { existing?.maintItems?.takeIf { it.isNotEmpty() } ?: DEFAULT_MAINT }
-    val intervals = remember { mutableStateMapOf<String, String>().apply { baseItems.forEach { put(it.name, it.intervalKm.toString()) } } }
-    var ins by remember { mutableStateOf(existing?.insuranceExpiry ?: 0L) }
-    var puc by remember { mutableStateOf(existing?.pucExpiry ?: 0L) }
-    var fit by remember { mutableStateOf(existing?.fitnessExpiry ?: 0L) }
-
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text(if (existing == null) "Add vehicle" else "Edit vehicle") },
-        text = {
-            Column(Modifier.verticalScroll(rememberScrollState())) {
-                Field("Vehicle number", number, { number = it })
-                Field("Name / label (e.g. Activa)", name, { name = it })
-                Field("Model (e.g. Bajaj Maxima / Tata Ace)", model, { model = it })
-                Text("Type", fontSize = 11.sp, color = NeutralTextSoft)
-                ChipPick(VEHICLE_TYPES, type) { type = it }
-                Field("Current odometer (km)", km, { km = it }, numeric = true)
-                Text("Service intervals (km) — model-wise", fontSize = 11.sp, color = NeutralTextSoft, modifier = Modifier.padding(top = 6.dp))
-                baseItems.forEach { mi ->
-                    Field("${mi.name} every", intervals[mi.name] ?: "", { intervals[mi.name] = it }, numeric = true)
-                }
-                DateField("Insurance expiry", ins) { ins = it }
-                DateField("PUC expiry", puc) { puc = it }
-                DateField("Fitness expiry (commercial)", fit) { fit = it }
-            }
-        },
-        confirmButton = {
-            TextButton(onClick = {
-                if (number.isBlank() && name.isBlank()) return@TextButton
-                val base = existing ?: Vehicle()
-                val items = baseItems.map { it.copy(intervalKm = intervals[it.name]?.toIntOrNull() ?: it.intervalKm) }
-                onSave(
-                    base.copy(
-                        number = number.trim(), name = name.trim(), model = model.trim(), type = type,
-                        currentKm = maxOf(km.toIntOrNull() ?: 0, base.currentKm),
-                        maintItems = items,
-                        insuranceExpiry = ins, pucExpiry = puc, fitnessExpiry = fit,
-                    ),
-                )
-            }) { Text("Save") }
-        },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
-    )
 }
 
 @Composable

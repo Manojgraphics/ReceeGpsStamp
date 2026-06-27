@@ -1667,7 +1667,7 @@ function importRecceDialog(){
   const surs=((DATA&&DATA.surveyors)||[]).filter(s=>!isHidden(s.uid)).sort((a,b)=>(a.name||"").localeCompare(b.name||""));
   const dists=(CATALOG.distributors||[]).slice().sort((a,b)=>(a.name||"").localeCompare(b.name||""));
   if(!surs.length){ alert("No field users yet. A field user must sign into the app at least once."); return; }
-  if(!dists.length){ alert("No distributors in catalog. Add one from Project Setup first."); return; }
+  if(!dists.length){ alert("No distributors yet. Add one from Project Setup first."); return; }
   const m=$("#modal"); m.classList.remove("hidden");
   m.innerHTML=`<div class="modalbox"><h3 style="margin:0 0 4px">📥 Import recces from Excel</h3>
     <div style="font-size:12px;color:var(--soft);margin-bottom:10px">Bulk-add completed recces under a field user so you can proceed to the Installation module. Columns: <b>Shop</b>, <i>City</i>, <i>Status</i>, <b>Media</b>, <i>Size</i> (e.g. 24×48 ft), <i>Creative</i>, <i>Qty</i>, <i>Remark</i>, <i>Date</i>. Photos are uploaded later from the Installation row (next step).</div>
@@ -2036,7 +2036,7 @@ function renderSetup(){
   $("#setup").innerHTML=`
     <div style="display:flex;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:14px">
       <div style="flex:1;min-width:150px"><div style="font-size:18px;font-weight:800">Project Setup</div><div style="font-size:12.5px;color:var(--soft)">Companies, creatives, media &amp; imports</div></div>
-      <button class="btn y" id="suCat" title="Add / edit / remove companies + distributors (unified)">⚙️ Manage catalog</button>
+      <button class="btn y" id="suCat" title="Add / edit / remove companies + distributors">🏢 Companies &amp; Distributors</button>
     </div>
     <div class="grid" style="grid-template-columns:1fr 1fr;gap:14px;align-items:start">
       <div style="display:flex;flex-direction:column;gap:14px">
@@ -2125,7 +2125,7 @@ async function renameDistributorDialog(distId){
   try{
     // 1) Catalog rename
     const {comps,dists}=await loadCat();
-    const idx=dists.findIndex(d=>d.id===distId); if(idx<0){ alert("Catalog entry missing"); return; }
+    const idx=dists.findIndex(d=>d.id===distId); if(idx<0){ alert("Distributor entry missing"); return; }
     dists[idx].name=newName; await saveCatalog(comps,dists);
     // 2) Cascade to each field user's backup/distributors + assignments doc
     let touchedUsers=0;
@@ -2209,8 +2209,8 @@ async function openCatalogManager(){
       <div class="filters" style="gap:7px;margin-bottom:12px;flex-wrap:wrap"><input type="text" id="ndName" placeholder="Distributor name" class="suInp" style="flex:1;min-width:140px"><select id="ndComp" class="suInp" style="min-width:140px"><option value="">Company…</option>${comps.map(c=>`<option value="${esc(c.name)}">${esc(c.name)}</option>`).join("")}</select><input type="text" id="ndCity" placeholder="City" class="suInp" style="width:130px"><input type="tel" id="ndContact" placeholder="Contact (10)" class="suInp" maxlength="10" style="width:130px"><button class="btn y" id="ndAdd">+ Add</button></div>
       ${dists.length?`<div class="tablewrap"><table><tr><th>Distributor</th><th>Company</th><th>City</th><th>Contact</th><th>Shops</th><th></th></tr>${dists.slice().sort((a,b)=>(a.name||"").localeCompare(b.name||"")).map(d=>{ const di=dists.indexOf(d); return `<tr><td><input type="text" class="dName" data-di="${di}" value="${esc(d.name)}" style="width:100%;padding:5px 7px;border:1px solid var(--line);border-radius:7px;font-size:12.5px;font-weight:700"></td><td><select class="dCo" data-di="${di}" style="width:100%;padding:5px 7px;border:1px solid var(--line);border-radius:7px;font-size:12.5px"><option value="">—</option>${comps.map(c=>`<option value="${esc(c.name)}" ${c.name===d.companyName?"selected":""}>${esc(c.name)}</option>`).join("")}</select></td><td><input type="text" class="dCity" data-di="${di}" value="${esc(d.city||"")}" style="width:100%;padding:5px 7px;border:1px solid var(--line);border-radius:7px;font-size:12.5px"></td><td><input type="tel" class="dContact" data-di="${di}" value="${esc(d.contact||"")}" maxlength="10" style="width:100%;padding:5px 7px;border:1px solid var(--line);border-radius:7px;font-size:12.5px"></td><td style="text-align:center">${shopsOf(d.name)}</td><td><button class="btn dDel" data-di="${di}" style="background:#FBEAE5;color:var(--danger);border:none;padding:5px 10px;font-size:11.5px" title="Remove distributor">✕</button></td></tr>`; }).join("")}</table></div>`:`<div class="card loading">No distributors yet — add one above.</div>`}`;
     m.innerHTML=`<div class="modalbox" style="max-width:880px">
-      <div style="display:flex;align-items:center;gap:10px;margin-bottom:4px"><h3 style="margin:0;flex:1">⚙️ Manage Catalog</h3><button class="btn" id="catClose">Done</button></div>
-      <div style="font-size:12px;color:var(--soft);margin-bottom:12px">Companies (with creatives + media types) and distributors — shared with every field user's app.</div>
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:4px"><h3 style="margin:0;flex:1">🏢 Companies &amp; Distributors</h3><button class="btn" id="catClose">Done</button></div>
+      <div style="font-size:12px;color:var(--soft);margin-bottom:12px">Master list of companies (with their creatives + media types) and distributors — shared with every field user's app.</div>
       <div class="filters" style="gap:4px;background:var(--bg);border-radius:50px;padding:3px;margin-bottom:14px;display:inline-flex">${tab("companies","🏢 Companies",comps.length)}${tab("distributors","🏪 Distributors",dists.length)}</div>
       <div>${_mcTab==="distributors"?distributorsPane:companiesPane}</div>
     </div>`;
@@ -2277,7 +2277,7 @@ async function doSetupAssign(){
   const name=$("#suProj").value.trim(), city=$("#suCity").value.trim(), contact=$("#suContact").value.replace(/\D/g,"").slice(0,10);
   const setup={company,creatives,mediaTypes,name,city,contact};
   const lines=$("#suShops").value.split("\n").map(l=>l.trim()).filter(Boolean);
-  if(lines.length && !uid){ alert("Shops need a field user — pick one in 'Assign to', or clear the shops to save catalog-only."); return; }
+  if(lines.length && !uid){ alert("Shops need a field user — pick one in 'Assign to', or clear the shops to save without assigning."); return; }
   if(lines.length && !name){ alert("④ Enter a project name for the shops"); return; }
   const incoming=lines.map(l=>{ const p=l.split(",").map(x=>x.trim()); return {id:rid(),name:p[0]||"",city:p[1]||"",contact:(p[2]||"").replace(/\D/g,"").slice(0,10),company,project:name}; }).filter(s=>s.name);
   try{
@@ -2297,8 +2297,8 @@ async function doSetupAssign(){
       drawCurrent(uid);
     } else {
       await upsertCatalog(company, creatives, mediaTypes, name, city, contact);
-      logAudit("setup",`Added to catalog: "${company}${name?" / "+name:""}"`);
-      alert(`Saved to catalog ✓  "${name||company}" is now available to assign to any field user — open "📌 Assign an existing project" below.`);
+      logAudit("setup",`Added "${company}${name?" / "+name:""}"`);
+      alert(`Saved ✓  "${name||company}" is now available to assign to any field user — open "📌 Assign to a field user" below.`);
       renderSetup();
     }
   }catch(e){ alert("Could not save: "+(e.message||e)); }

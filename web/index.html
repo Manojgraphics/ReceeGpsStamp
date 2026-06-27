@@ -1370,6 +1370,15 @@ function renderSetup(){
     <datalist id="compListS">${catComps.map(c=>`<option value="${esc(c)}"></option>`).join("")}</datalist>
     <datalist id="projListS">${catProjs.map(p=>`<option value="${esc(p)}"></option>`).join("")}</datalist>
     <datalist id="creListS">${catCre.map(c=>`<option value="${esc(c)}"></option>`).join("")}</datalist>
+    <div class="sec">📌 Assign an existing project</div>
+    <div class="card" style="max-width:780px">
+      <div style="font-size:12px;color:var(--soft);margin-bottom:10px">Set up companies & projects in “Manage catalog”, then assign any of them to a field user here — no need to re-enter details.</div>
+      <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+        <select id="apProj" class="suInp" style="flex:1;min-width:200px"><option value="">Choose a project…</option>${(CATALOG.distributors||[]).slice().sort((a,b)=>(a.name||"").localeCompare(b.name||"")).map(d=>`<option value="${esc(d.id)}">${esc(d.name)}${d.companyName?" · "+esc(d.companyName):""}${d.city?" ("+esc(d.city)+")":""}</option>`).join("")}</select>
+        <select id="apSur" class="suInp" style="width:auto;min-width:160px"><option value="">field user…</option>${surs.map(s=>`<option value="${esc(s.uid)}">${esc(s.name)}</option>`).join("")}</select>
+        <button class="btn y" id="apGo">Assign project</button>
+      </div>
+    </div>
     <div class="sec">📋 Project shops · pending / done</div>
     <div id="suShopStatus"></div>
     <div class="sec">Pushed to this field user</div>
@@ -1403,6 +1412,27 @@ function renderSetup(){
   $("#suFile").onchange=e=>{ const f=e.target.files[0]; if(!f) return; const r=new FileReader(); r.onload=()=>{ const t=$("#suShops"); t.value=(t.value.trim()?t.value.trim()+"\n":"")+String(r.result||"").trim(); }; r.readAsText(f); };
   $("#suGo").onclick=doSetupAssign;
   $("#suCat").onclick=openCatalogManager;
+  // Assign an existing catalog project (company + creatives/media) to a field user — decoupled from setup.
+  $("#apGo").onclick=async()=>{
+    const did=$("#apProj").value, uid=$("#apSur").value;
+    if(!did){ alert("Choose a project"); return; }
+    if(!uid){ alert("Choose a field user"); return; }
+    const d=(CATALOG.distributors||[]).find(x=>x.id===did); if(!d){ alert("Project not found — reopen Manage catalog."); return; }
+    const comp=(CATALOG.companies||[]).find(c=>c.id===d.companyId)||(CATALOG.companies||[]).find(c=>(c.name||"").toLowerCase()===(d.companyName||"").toLowerCase());
+    const setup={ company:(comp&&comp.name)||d.companyName||"", creatives:(comp&&comp.creatives)||[], mediaTypes:(comp&&comp.mediaTypes)||[], name:d.name||"", city:d.city||"", contact:d.contact||"" };
+    if(!setup.company){ alert("This project isn't linked to a company — fix it in Manage catalog first."); return; }
+    const uname=(($("#apSur").selectedOptions[0]||{}).text)||uid;
+    try{
+      const r=doc(db,"assignments",uid), snap=await getDoc(r), data=(snap.exists()&&snap.data())||{};
+      const curP=data.projects||[];
+      const pi=curP.findIndex(p=>(p.company||"").toLowerCase()===setup.company.toLowerCase()&&(p.name||"").toLowerCase()===setup.name.toLowerCase());
+      if(pi>=0) curP[pi]=setup; else curP.push(setup);
+      await setDoc(r,{projects:curP,updatedAt:Date.now()},{merge:true});
+      logAudit("assign",`Assigned project "${setup.company}${setup.name?" / "+setup.name:""}" to ${uname}`);
+      alert(`Assigned ✓  "${setup.name||setup.company}" will appear in ${uname}'s app after it syncs.`);
+      if($("#suSur").value===uid) drawCurrent(uid);
+    }catch(e){ alert("Could not assign: "+(e.message||e)); }
+  };
   // Project-wise pending / done shops (from synced shop data)
   const shops=DATA.shops||[]; const byProj={};
   shops.forEach(s=>{ const p=s.project||"General"; (byProj[p]=byProj[p]||{pending:[],done:[]}); if((s.status||"Pending")==="Pending") byProj[p].pending.push(s); else byProj[p].done.push(s); });

@@ -20,6 +20,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -197,7 +198,7 @@ fun ProjectSetupScreen(
             modifier = Modifier.weight(1f),
         ) {
             Column(
-                Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(10.dp),
+                Modifier.fillMaxSize().verticalScroll(rememberScrollState()).imePadding().padding(10.dp),
                 verticalArrangement = Arrangement.spacedBy(6.dp),
             ) {
             if (page == "main") {

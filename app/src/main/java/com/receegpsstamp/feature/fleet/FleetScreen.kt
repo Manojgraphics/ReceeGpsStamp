@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -207,7 +208,7 @@ private fun VehicleDetail(
     onDeleteFuel: (String) -> Unit,
 ) {
     val st = statusOf(v, fuel)
-    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(12.dp)) {
+    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).imePadding().padding(12.dp)) {
         RgsCard(Modifier.fillMaxWidth()) {
             Row {
                 Stat("Odometer", "${v.currentKm} km", Modifier.weight(1f))
@@ -266,7 +267,7 @@ private fun MaintenanceDetail(
     onService: () -> Unit, onDeleteService: (String) -> Unit,
 ) {
     val st = statusOf(v, fuel)
-    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(12.dp)) {
+    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).imePadding().padding(12.dp)) {
         RgsCard(Modifier.fillMaxWidth()) {
             Row {
                 Stat("Odometer", "${v.currentKm} km", Modifier.weight(1f))

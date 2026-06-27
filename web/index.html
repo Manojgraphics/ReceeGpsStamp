@@ -1999,8 +1999,16 @@ function importInstallDialog(projectName, units, onDone){
       try{ await setInstall(o.hit.key, o.fields); if(o.fields.approval==="Approved") await pushInstallList(o.hit.r, o.hit.mi, true); ok++; }catch(e){ fail++; }
     }
     logAudit("install",`Imported ${ok} install row(s) for ${projectName}${fail?` · ${fail} failed`:""}`);
+    // Auto-advance the project's stage to "Installation" after a meaningful approval Excel import — moves
+    // it past Approval phase. Only if currently RecceDone / empty (i.e., not already past Installation).
+    if(ok>0){
+      const cd=(CATALOG.distributors||[]).find(d=>(d.name||"").toLowerCase()===(projectName||"").toLowerCase());
+      if(cd && (!cd.stage || cd.stage==="RecceDone" || cd.stage==="Recce")){
+        try{ const {comps,dists}=await loadCat(); const i=dists.findIndex(x=>x.id===cd.id); if(i>=0){ dists[i].stage="Installation"; await saveCatalog(comps,dists); logAudit("install",`Auto-advanced "${projectName}" → Installation (after approval Excel)`); } }catch(e){}
+      }
+    }
     m.classList.add("hidden");
-    alert(`Imported ✓  ${ok} updated${fail?` · ${fail} failed`:""}.`);
+    alert(`Imported ✓  ${ok} updated${fail?` · ${fail} failed`:""}.${ok>0?"\n\nProject auto-advanced to Installation stage.":""}`);
     if(typeof onDone==="function") onDone();
   };
 }
@@ -2272,16 +2280,32 @@ function renderSetup(){
         </div>
       </div>
     </div>
-    <div class="card" style="margin-top:14px;padding:18px;background:${completed?"linear-gradient(135deg,#E0F2FF 0%,var(--card) 100%)":started?"linear-gradient(135deg,#E8F5EC 0%,var(--card) 100%)":allOk?"linear-gradient(135deg,#FFF6DC 0%,var(--card) 100%)":"var(--card)"};border:${completed?"1.5px solid #5DA9E9":allOk?"1.5px solid var(--brand)":"1px solid var(--line)"}">
-      <div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap">
-        <div style="font-size:34px;flex:0 0 auto">${completed?"🏁":started?"✅":"🚀"}</div>
-        <div style="flex:1;min-width:200px">
-          <div style="font-size:16px;font-weight:800">${completed?"Project completed · unlinked from team":started?"Project started":"Ready to start?"}</div>
-          <div style="font-size:12px;color:var(--soft);margin-top:2px">${completed?`Completed${completedAt?" on "+new Date(completedAt).toLocaleDateString("en-IN",{day:"numeric",month:"short",year:"numeric"}):""} — no longer in any field user's app. Data preserved on server. Re-open if needed.`:started?`Started ${stage?"in "+stage+" mode ":""}${startedAt?"on "+new Date(startedAt).toLocaleDateString("en-IN",{day:"numeric",month:"short",year:"numeric"}):""} · assign to any field user below · mark <b>🏁 Complete</b> when done`:allOk?`All 5 steps done — start <b>${esc(_suCo)} · ${esc(dist?dist.name:"")}</b> and then assign`:`Complete step ${activeStep+1} of 5 to start the project`}</div>
+    ${(()=>{ // Stage-aware banner (single source of truth for the project's current lifecycle state)
+      const phase = completed ? "complete" : !started ? (allOk?"ready":"setup") : stage==="RecceDone" ? "approval" : stage==="Installation" ? "install" : stage==="InstallDone" ? "installdone" : "active";
+      const styles = {
+        setup:      {bg:"var(--card)",                                            border:"1px solid var(--line)",   ic:"🚀", title:"Set up the project", sub:`Complete step ${activeStep+1} of 5 to start the project`},
+        ready:      {bg:"linear-gradient(135deg,#FFF6DC 0%,var(--card) 100%)",    border:"1.5px solid var(--brand)", ic:"🚀", title:"Ready to start?", sub:`All 5 steps done — start <b>${esc(_suCo)} · ${esc(dist?dist.name:"")}</b> and then assign`},
+        active:     {bg:"linear-gradient(135deg,#E8F5EC 0%,var(--card) 100%)",    border:"1.5px solid #1B873F",     ic:"✅", title:"Project started — Recce in progress",            sub:`Started${startedAt?" on "+new Date(startedAt).toLocaleDateString("en-IN",{day:"numeric",month:"short",year:"numeric"}):""} · assign below · field user marks <b>✓ Recce Done</b> from the app when finished`},
+        approval:   {bg:"linear-gradient(135deg,#FFF6DC 0%,var(--card) 100%)",    border:"1.5px solid #E0A93B",     ic:"⏳", title:"Approval pending — review &amp; approve recces",   sub:`Field user marked <b>Recce Done</b>. Open the Install module to approve each recce — uploading the approvals Excel auto-advances the project to <b>Installation</b>.`},
+        install:    {bg:"linear-gradient(135deg,#E0F2FF 0%,var(--card) 100%)",    border:"1.5px solid #5DA9E9",     ic:"🛠", title:"Installation in progress",                       sub:`Recces approved · field users installing. Mark <b>Install Done</b> from the app when complete.`},
+        installdone:{bg:"linear-gradient(135deg,#E8F5EC 0%,var(--card) 100%)",    border:"1.5px solid #1B873F",     ic:"✅", title:"Installation done — ready to wrap up",           sub:`Generate POE from the Install module, then mark <b>🏁 Complete</b> to unlink the project from the team.`},
+        complete:   {bg:"linear-gradient(135deg,#E0F2FF 0%,var(--card) 100%)",    border:"1.5px solid #5DA9E9",     ic:"🏁", title:"Project completed · unlinked from team",         sub:`Completed${completedAt?" on "+new Date(completedAt).toLocaleDateString("en-IN",{day:"numeric",month:"short",year:"numeric"}):""} — no longer in any field user's app. Data preserved on server. Re-open if needed.`}
+      };
+      const s = styles[phase];
+      const btns = completed?`<button class="btn y" id="suReopen" style="padding:9px 16px;font-size:13px">↻ Re-open</button>`
+                 : started?`<button class="btn" id="suResetStart" style="background:var(--bg);font-size:12px">↺ Reset</button>${phase==="approval"?`<button class="btn y" id="suGoInstall" style="padding:9px 16px;font-size:13px">📑 Open Install module ›</button>`:""}${phase==="installdone"||phase==="install"?`<button class="btn" id="suGoInstall2" style="background:#E0F2FF;color:#0858A3;border:none;padding:9px 16px;font-size:13px;font-weight:700">📑 Install module ›</button>`:""}<button class="btn" id="suComplete" style="padding:11px 22px;font-size:14px;background:#E0F2FF;color:#0858A3;border:none;font-weight:700">🏁 Mark complete</button><button class="btn y" id="suStart" style="padding:11px 22px;font-size:14px">Re-confirm</button>`
+                 : `<button class="btn y" id="suStart" ${(!allOk)?"disabled":""} style="padding:11px 22px;font-size:14px">🚀 Start project</button>`;
+      return `<div class="card" style="margin-top:14px;padding:18px;background:${s.bg};border:${s.border}">
+        <div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap">
+          <div style="font-size:34px;flex:0 0 auto">${s.ic}</div>
+          <div style="flex:1;min-width:200px">
+            <div style="font-size:16px;font-weight:800">${s.title}</div>
+            <div style="font-size:12px;color:var(--soft);margin-top:2px">${s.sub}</div>
+          </div>
+          ${btns}
         </div>
-        ${completed?`<button class="btn y" id="suReopen" style="padding:9px 16px;font-size:13px">↻ Re-open</button>`:started?`<button class="btn" id="suResetStart" style="background:var(--bg);font-size:12px">↺ Reset</button><button class="btn" id="suComplete" style="padding:11px 22px;font-size:14px;background:#E0F2FF;color:#0858A3;border:none;font-weight:700">🏁 Mark complete</button><button class="btn y" id="suStart" style="padding:11px 22px;font-size:14px">Re-confirm</button>`:`<button class="btn y" id="suStart" ${(!allOk)?"disabled":""} style="padding:11px 22px;font-size:14px">🚀 Start project</button>`}
-      </div>
-    </div>
+      </div>`;
+    })()}
     <div class="sec">📌 Assign to a field user</div>
     <div class="card" style="padding:14px">
       <div style="font-size:12px;color:var(--soft);margin-bottom:10px">Push <b>${esc(_suCo)}${dist?` · ${esc(dist.name)}`:""}</b> (with the above creatives &amp; media) to a field user's app.${!started?` <span style="color:var(--brand-d);font-weight:700">Tip: start the project above first.</span>`:""}</div>
@@ -2304,6 +2328,8 @@ function renderSetup(){
   { const rb=$("#suResetStart"); if(rb) rb.onclick=()=>resetProjectStart(_suDist); }
   { const cb=$("#suComplete"); if(cb) cb.onclick=()=>completeProject(_suDist,_suCo); }
   { const rb=$("#suReopen"); if(rb) rb.onclick=()=>reopenProject(_suDist); }
+  { const gi=$("#suGoInstall"); if(gi) gi.onclick=()=>{ document.querySelectorAll('.nav-item[data-tab]').forEach(x=>x.classList.remove('on')); document.querySelectorAll('.tabpane').forEach(x=>x.classList.add('hidden')); $("#install").classList.remove("hidden"); _instView="detail"; _instSel=dist?dist.name:""; renderInstall(); window.scrollTo(0,0); }; }
+  { const gi2=$("#suGoInstall2"); if(gi2) gi2.onclick=()=>{ document.querySelectorAll('.nav-item[data-tab]').forEach(x=>x.classList.remove('on')); document.querySelectorAll('.tabpane').forEach(x=>x.classList.add('hidden')); $("#install").classList.remove("hidden"); _instView="detail"; _instSel=dist?dist.name:""; renderInstall(); window.scrollTo(0,0); }; }
   $("#apGo").onclick=async()=>{
     const uid=$("#apSur").value; if(!uid){ alert("Choose a field user"); return; }
     if(!dist){ alert("Pick a distributor first"); return; }

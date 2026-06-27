@@ -1582,6 +1582,93 @@ function sizeStr(mi){ return (mi&&mi.width&&mi.height)?(numTrim(mi.width)+"×"+n
 // Flatten recces → one install UNIT per media-size (key = recceId#mediaIndex). Approval/install/POE are per size.
 function installUnits(recces){ const out=[]; for(const r of recces){ const items=(r.media&&r.media.length)?r.media:[{idx:0,type:"",creative:"",width:0,height:0,unit:"",photos:r.photos||[]}]; items.forEach(mi=>{ const key=r.id+"#"+(mi.idx||0); out.push({r,mi,key,i:INSTALL[key]||{},fi:(DATA.appInstall||{})[key]||null}); }); } return out; }
 async function setInstall(id,fields){ if(!id) return; try{ INSTALL[id]={...(INSTALL[id]||{}),...fields,by:(auth.currentUser&&auth.currentUser.email)||"",at:Date.now()}; await setDoc(doc(db,"installations",id),INSTALL[id],{merge:true}); }catch(e){ alert("Save failed: "+(e.message||e)); } }
+// Bulk-add already-done recces from Excel under a chosen field user + distributor — so admin can proceed to Installation without waiting for the app to push.
+function importRecceDialog(){
+  const surs=((DATA&&DATA.surveyors)||[]).filter(s=>!isHidden(s.uid)).sort((a,b)=>(a.name||"").localeCompare(b.name||""));
+  const dists=(CATALOG.distributors||[]).slice().sort((a,b)=>(a.name||"").localeCompare(b.name||""));
+  if(!surs.length){ alert("No field users yet. A field user must sign into the app at least once."); return; }
+  if(!dists.length){ alert("No distributors in catalog. Add one from Project Setup first."); return; }
+  const m=$("#modal"); m.classList.remove("hidden");
+  m.innerHTML=`<div class="modalbox"><h3 style="margin:0 0 4px">📥 Import recces from Excel</h3>
+    <div style="font-size:12px;color:var(--soft);margin-bottom:10px">Bulk-add completed recces under a field user so you can proceed to the Installation module. Columns: <b>Shop</b>, <i>City</i>, <i>Status</i>, <b>Media</b>, <i>Size</i> (e.g. 24×48 ft), <i>Creative</i>, <i>Qty</i>, <i>Remark</i>, <i>Date</i>. Photos are uploaded later from the Installation row (next step).</div>
+    <div class="filters" style="gap:10px;flex-wrap:wrap">
+      <select id="ruSur" style="flex:1;min-width:160px"><option value="">Choose field user…</option>${surs.map(s=>`<option value="${esc(s.uid)}">${esc(s.name)}</option>`).join("")}</select>
+      <select id="ruDist" style="flex:1;min-width:160px"><option value="">Choose distributor…</option>${dists.map(d=>`<option value="${esc(d.id)}">${esc(d.name)}${d.city?" · "+esc(d.city):""}</option>`).join("")}</select>
+    </div>
+    <div class="filters" style="margin-top:10px"><button class="btn" id="ruTpl">⬇ Template</button><button class="btn" id="ruPick">⬆ Choose file</button><span id="ruFn" style="font-size:12px;color:var(--soft);align-self:center">No file chosen</span><input type="file" id="ruFile" accept=".xlsx,.xls,.csv,.txt" style="display:none"></div>
+    <div id="ruPrev" style="margin-top:12px;font-size:12.5px;max-height:280px;overflow:auto"></div>
+    <div style="text-align:right;margin-top:12px"><button class="btn" id="ruCancel">Cancel</button> <button class="btn y" id="ruApply" disabled>Apply</button></div></div>`;
+  m.onclick=ev=>{ if(ev.target===m) m.classList.add("hidden"); };
+  $("#ruCancel").onclick=()=>m.classList.add("hidden");
+  $("#ruPick").onclick=()=>$("#ruFile").click();
+  $("#ruTpl").onclick=()=>{
+    const rows=[["Sharma Cloth Store","Jalgaon","Interested","Standee","24×48 ft","Brand A","1","clean spot",""],["Krishna Garments","Bhusawal","Interested","Glow Sign","36×72 ft","Brand B","2","corner shop",""],["Sai Readymade","Jalgaon","Revisit","Wall Painting","8×6 ft","","1","owner out",""]];
+    xlsx("recce_template",["Shop","City","Status","Media","Size","Creative","Qty","Remark","Date"],rows);
+  };
+  let pending=[];
+  const parseSize=str=>{ if(!str)return {w:0,h:0,unit:""}; const s=String(str).trim(); const mm=s.match(/^([\d.]+)\s*[×xX*]\s*([\d.]+)\s*([a-zA-Z]*)$/); if(mm) return {w:+mm[1]||0,h:+mm[2]||0,unit:mm[3]||""}; return {w:0,h:0,unit:""}; };
+  const validSt=["Interested","Not Interested","Revisit","Closed"];
+  const validStLc=new Set(validSt.map(x=>x.toLowerCase()));
+  $("#ruFile").onchange=async e=>{
+    const f=e.target.files[0]; if(!f) return;
+    $("#ruFn").textContent=f.name;
+    try{
+      const buf=await f.arrayBuffer(); const wb=XLSX.read(buf,{type:"array"}); const sh=wb.Sheets[wb.SheetNames[0]]; const rows=XLSX.utils.sheet_to_json(sh,{defval:"",raw:false});
+      const matched=[], skipped=[];
+      rows.forEach((r,idx)=>{
+        const get=keys=>{ for(const k of Object.keys(r)){ const kn=k.trim().toLowerCase(); if(keys.some(x=>kn===x||kn.startsWith(x))) return r[k]; } return ""; };
+        const shop=String(get(["shop","store","outlet"])||"").trim();
+        const media=String(get(["media","type"])||"").trim();
+        if(!shop){ skipped.push({idx:idx+2,reason:"no shop name"}); return; }
+        if(!media){ skipped.push({idx:idx+2,reason:"no media type"}); return; }
+        const city=String(get(["city","location"])||"").trim();
+        let status=String(get(["status"])||"Interested").trim(); if(validStLc.has(status.toLowerCase())) status=validSt.find(x=>x.toLowerCase()===status.toLowerCase()); else status="Interested";
+        const creative=String(get(["creative","brand"])||"").trim();
+        const size=parseSize(get(["size"]));
+        const qty=Math.max(1,parseInt(get(["qty","quantity"]))||1);
+        const remark=String(get(["remark","note","comment"])||"").trim();
+        const dateStr=String(get(["date"])||"").trim();
+        let date=Date.now(); if(dateStr){ const d=new Date(dateStr); if(!isNaN(d.getTime())) date=d.getTime(); }
+        matched.push({shop,city,status,media,size,creative,qty,remark,date});
+      });
+      pending=matched;
+      $("#ruPrev").innerHTML=`<div style="margin-bottom:6px"><b>${matched.length}</b> ready to import · <b style="color:${skipped.length?'var(--danger)':'var(--soft)'}">${skipped.length}</b> skipped</div>`+
+        (matched.length?`<div style="border:1px solid var(--line);border-radius:9px;padding:8px 10px;margin-bottom:8px;max-height:130px;overflow:auto">${matched.slice(0,20).map(o=>`<div style="padding:3px 0;border-bottom:1px solid var(--line);font-size:11.5px"><b>${esc(o.shop)}</b>${o.city?" · "+esc(o.city):""} · ${esc(o.media)}${o.size.w?` · ${o.size.w}×${o.size.h}${o.size.unit?" "+o.size.unit:""}`:""}${o.qty>1?` · ${o.qty}×`:""} · ${esc(o.status)}</div>`).join("")}${matched.length>20?`<div style="padding:4px 0;color:var(--soft)">+${matched.length-20} more…</div>`:""}</div>`:"")+
+        (skipped.length?`<div style="border:1px solid #E6A6A6;background:#FBECEC;border-radius:9px;padding:8px 10px;max-height:120px;overflow:auto">${skipped.slice(0,20).map(s=>`<div style="padding:3px 0;font-size:11.5px;color:#9A2D2D">Row ${s.idx}: ${esc(s.reason)}</div>`).join("")}</div>`:"");
+      $("#ruApply").disabled=matched.length===0;
+    }catch(err){ $("#ruPrev").innerHTML=`<div style="color:var(--danger);font-size:13px">Could not read file: ${esc(err.message||err)}</div>`; pending=[]; $("#ruApply").disabled=true; }
+  };
+  $("#ruApply").onclick=async()=>{
+    const uid=$("#ruSur").value; if(!uid){ alert("Pick a field user"); return; }
+    const did=$("#ruDist").value; if(!did){ alert("Pick a distributor"); return; }
+    const cd=(CATALOG.distributors||[]).find(x=>x.id===did); if(!cd){ alert("Distributor not found"); return; }
+    if(!pending.length) return;
+    const btn=$("#ruApply"); btn.disabled=true; btn.textContent="Importing…";
+    try{
+      const readArr=async(n)=>{ try{ const d=await getDoc(doc(db,"users",uid,"backup",n)); if(!d.exists()) return []; let v=null; try{v=JSON.parse(d.get("json")||"null");}catch(e){} return Array.isArray(v)?v:[]; }catch(e){ return []; } };
+      const dists=await readArr("distributors"), shops=await readArr("shops"), recces=await readArr("recces");
+      let dEntry=dists.find(d=>(d.name||"").toLowerCase()===(cd.name||"").toLowerCase());
+      if(!dEntry){ dEntry={id:rid(),name:cd.name,city:cd.city||"",companyName:cd.companyName||"",stage:cd.stage||""}; dists.push(dEntry); }
+      const distId=dEntry.id;
+      let addedR=0, addedS=0;
+      for(const o of pending){
+        let shop=shops.find(s=>(s.name||"").toLowerCase()===o.shop.toLowerCase()&&s.distributorId===distId);
+        if(!shop){ shop={id:rid(),name:o.shop,city:o.city||"",distributorId:distId,status:"Done"}; shops.push(shop); addedS++; } else { shop.status="Done"; if(o.city&&!shop.city) shop.city=o.city; }
+        const recce={id:rid(),shopId:shop.id,distributorId:distId,status:o.status,remark:o.remark,createdAt:o.date,lat:0,lng:0,address:"",shopPhotos:[],media:[{idx:0,type:o.media,creative:o.creative,width:o.size.w,height:o.size.h,unit:o.size.unit,qty:o.qty,photos:[]}]};
+        recces.push(recce); addedR++;
+      }
+      const now=Date.now();
+      await setDoc(doc(db,"users",uid,"backup","distributors"),{json:JSON.stringify(dists),updatedAt:now},{merge:true});
+      await setDoc(doc(db,"users",uid,"backup","shops"),{json:JSON.stringify(shops),updatedAt:now},{merge:true});
+      await setDoc(doc(db,"users",uid,"backup","recces"),{json:JSON.stringify(recces),updatedAt:now},{merge:true});
+      const sname=(((DATA&&DATA.surveyors)||[]).find(s=>s.uid===uid)||{}).name||uid;
+      logAudit("import",`Imported ${addedR} recce(s) for ${sname} → ${cd.name}${addedS?` (+${addedS} shop(s))`:""}`);
+      m.classList.add("hidden");
+      alert(`✓ Imported ${addedR} recce(s)${addedS?` + ${addedS} new shop(s)`:""} for ${sname} → ${cd.name}.\n\nThey'll appear in the Installation module after the data refreshes. Photos can be added per row from the Install detail (coming next).`);
+      load();
+    }catch(e){ alert("Import failed: "+(e.message||e)); btn.disabled=false; btn.textContent="Apply"; }
+  };
+}
 // Bulk import install status from an Excel/CSV. Matches rows to existing recce×media units by Shop + Media type (+ optional size).
 function importInstallDialog(projectName, units, onDone){
   const m=$("#modal"); m.classList.remove("hidden");
@@ -1695,7 +1782,10 @@ function renderInstall(){
   list.forEach(g=>g.company=compByProj[g.project]||"");
   $("#install").innerHTML=`
     ${projSubnav('install')}
-    <div class="sec">🏗️ INSTALLATION · tap a project to approve / install / export POE</div>
+    <div style="display:flex;align-items:center;gap:10px;margin:8px 0">
+      <div class="sec" style="margin:0;flex:1">🏗️ INSTALLATION · tap a project to approve / install / export POE</div>
+      <button class="btn y" id="iRecImport">📥 Import recces (Excel)</button>
+    </div>
     ${list.length?`<div class="tablewrap"><table>
       <tr><th>Project</th><th>Company</th><th>Sizes</th><th>Approved</th><th>Installed</th><th>Issues</th></tr>
       ${list.map(g=>{ const cov=g.sizes?Math.round(g.installed*100/g.sizes):0;
@@ -1703,9 +1793,10 @@ function renderInstall(){
         <td>${esc(g.company||"—")}</td><td>${g.sizes}</td><td>${g.approved}</td>
         <td style="min-width:96px"><div class="bar"><i style="width:${cov}%"></i></div><span style="font-size:10.5px;color:var(--soft)">${g.installed} · ${cov}%</span></td>
         <td>${g.issues?`<span style="color:var(--danger);font-weight:700">${g.issues}</span>`:0}</td></tr>`; }).join("")}
-    </table></div>`:`<div class="card loading">No recce sizes yet. They appear here after field users complete recces.</div>`}`;
+    </table></div>`:`<div class="card loading">No recce sizes yet. Tap <b>📥 Import recces</b> above to bulk-add completed recces from Excel, or wait for field users to push recces from the app.</div>`}`;
   wirePT();
   document.querySelectorAll("#install .inLink").forEach(b=>b.onclick=()=>{ _instView="detail"; _instSel=b.dataset.p; renderInstall(); window.scrollTo(0,0); });
+  $("#iRecImport").onclick=importRecceDialog;
 }
 function renderInstallDetail(name){
   const recces=(DATA.recces||[]).filter(r=>r.id && (r.project||"—")===name);

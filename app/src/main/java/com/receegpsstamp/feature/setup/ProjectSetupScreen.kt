@@ -624,9 +624,20 @@ private fun ShopsWorkList(shops: List<Shop>, onAddShop: () -> Unit, onImport: ()
                 fontSize = 12.5.sp, color = NeutralTextSoft, modifier = Modifier.padding(vertical = 14.dp),
             )
         } else {
-            list.forEachIndexed { i, s ->
-                ShopRow(s, pending = seg == 0, onStart = { onStartShop(s) }, onEdit = { onEditShop(s) }, onSetStatus = { st -> onSetStatus(s, st) })
-                if (i < list.size - 1) Box(Modifier.fillMaxWidth().height(0.5.dp).background(NeutralOutline.copy(alpha = 0.5f)))
+            // City-wise grouping — work one city at a time. Cities A→Z; shops name-sorted within.
+            val grouped = list.groupBy { it.city.trim().ifBlank { "No city" } }.toSortedMap(compareBy { it.lowercase() })
+            val showCityHeaders = grouped.size > 1
+            grouped.forEach { (city, cityShops) ->
+                if (showCityHeaders) {
+                    Text(
+                        city.uppercase(), fontSize = 10.5.sp, fontWeight = FontWeight.Bold, letterSpacing = 0.4.sp,
+                        color = AppYellowDark, modifier = Modifier.padding(top = 8.dp, bottom = 2.dp),
+                    )
+                }
+                cityShops.forEachIndexed { i, s ->
+                    ShopRow(s, pending = seg == 0, onStart = { onStartShop(s) }, onEdit = { onEditShop(s) }, onSetStatus = { st -> onSetStatus(s, st) })
+                    if (i < cityShops.size - 1) Box(Modifier.fillMaxWidth().height(0.5.dp).background(NeutralOutline.copy(alpha = 0.5f)))
+                }
             }
         }
         Spacer(Modifier.height(10.dp))

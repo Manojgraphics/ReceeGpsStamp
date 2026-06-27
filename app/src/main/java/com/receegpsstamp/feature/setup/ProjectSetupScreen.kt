@@ -90,9 +90,7 @@ fun ProjectSetupScreen(
     creatives: List<String> = emptyList(),
     mediaTypes: List<String> = emptyList(),
     onAddCreative: (String) -> Unit = {},
-    onRemoveCreative: (String) -> Unit = {},
     onAddMediaType: (String) -> Unit = {},
-    onRemoveMediaType: (String) -> Unit = {},
     shops: List<Shop> = emptyList(),
     onAddShop: (name: String, city: String, contact: String) -> Unit = { _, _, _ -> },
     onImportShops: (String) -> Unit = {},
@@ -308,10 +306,10 @@ fun ProjectSetupScreen(
             }
 
             ChipSection("Creatives", RgsIcons.Edit, creatives.size, creativesOpen, { creativesOpen = !creativesOpen }) {
-                EditableChipFlow(creatives, onRemove = onRemoveCreative, onAdd = { showAddCreative = true })
+                EditableChipFlow(creatives, onAdd = { showAddCreative = true })
             }
             ChipSection("Media Types", RgsIcons.Grid, mediaTypes.size, mediaOpen, { mediaOpen = !mediaOpen }) {
-                EditableChipFlow(mediaTypes, onRemove = onRemoveMediaType, onAdd = { showAddMediaType = true })
+                EditableChipFlow(mediaTypes, onAdd = { showAddMediaType = true })
             }
 
             Spacer(Modifier.height(4.dp))
@@ -462,25 +460,20 @@ private fun ChipSection(
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun EditableChipFlow(items: List<String>, onRemove: (String) -> Unit, onAdd: () -> Unit) {
+private fun EditableChipFlow(items: List<String>, onAdd: () -> Unit) {
     FlowRow(
         horizontalArrangement = Arrangement.spacedBy(5.dp),
         verticalArrangement = Arrangement.spacedBy(5.dp),
         modifier = Modifier.padding(bottom = 2.dp),
     ) {
         items.forEach { name ->
+            // Creatives/media are manager-managed (web catalog) — field users can add, not remove/edit.
             Row(
                 Modifier.background(NeutralSurfaceV, RoundedCornerShape(8.dp))
-                    .padding(start = 10.dp, top = 5.dp, bottom = 5.dp, end = 6.dp),
+                    .padding(horizontal = 10.dp, vertical = 5.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Text(name, fontSize = 13.sp, fontWeight = FontWeight.Medium, color = NeutralText)
-                Spacer(Modifier.width(4.dp))
-                Box(
-                    Modifier.size(18.dp).clip(RoundedCornerShape(50))
-                        .background(NeutralTextSoft.copy(0.2f)).clickable { onRemove(name) },
-                    contentAlignment = Alignment.Center,
-                ) { Icon(RgsIcons.Close, null, tint = NeutralTextSoft, modifier = Modifier.size(12.dp)) }
             }
         }
         Box(

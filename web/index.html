@@ -892,7 +892,7 @@ function renderFleet(){
     return {...s, fuel, driver, travel, km, cpk:km?fuel/km:0, cps:s.surveyed?(fuel+travel)/s.surveyed:0}; }).filter(r=>r.fuel||r.km||r.driver||r.travel);
   const totalFuel=rows.reduce((a,r)=>a+r.fuel,0), totalKm=rows.reduce((a,r)=>a+r.km,0), totalDriver=rows.reduce((a,r)=>a+r.driver,0);
   const sub=`<div class="sec">🚚 FLEET ${RANGE.label!=="All time"?"· "+esc(RANGE.label):""}</div>
-    <div class="filters" style="gap:6px;margin-bottom:6px"><button class="btn ${_fleetView==='vehicles'?'y':''}" data-fv="vehicles">🚗 Vehicles</button><button class="btn ${_fleetView==='map'?'y':''}" data-fv="map">🗺️ Map</button></div>`;
+    <div class="filters" style="gap:6px;margin-bottom:6px"><button class="btn ${_fleetView==='vehicles'?'y':''}" data-fv="vehicles">🚗 Vehicles</button><button class="btn ${_fleetView==='map'?'y':''}" data-fv="map">🗺️ Map</button><button class="btn y" id="vAdd" style="margin-left:auto">+ Add vehicle</button></div>`;
   if(_fleetView==='map'){
     $("#fleet").innerHTML=sub+`
       <div class="sec">🗺️ MAP — 🚗 vehicle last-seen (from fuel/service GPS) + field-user route trail</div>
@@ -901,6 +901,7 @@ function renderFleet(){
       <div style="font-size:11.5px;color:var(--soft);margin-top:7px">Distance = straight-line between consecutive shops (GPS) — approximate, not road distance.</div>`;
     document.querySelectorAll("[data-fv]").forEach(b=>b.onclick=()=>{ _fleetView=b.dataset.fv; renderFleet(); });
     $("#flSur").onchange=()=>drawTrail($("#flSur").value);
+    $("#vAdd").onclick=()=>{ _fleetView='vehicles'; vehicleForm(null); };
     setTimeout(()=>{ try{ if(_fleetMap){ _fleetMap.remove(); _fleetMap=null; } }catch(e){}
       _fleetMap=L.map("fleetmap"); L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",{attribution:"© OpenStreetMap",maxZoom:19}).addTo(_fleetMap); _fleetMap.setView([20.59,78.96],5);
       const vm=FLEET.filter(v=>v.lat&&v.lng);
@@ -910,7 +911,7 @@ function renderFleet(){
   } else {
     $("#fleet").innerHTML=sub+`
       <div class="sec">🚗 COMPANY VEHICLES — live, shared with the app</div>
-      <div class="filters"><button class="btn y" id="vAdd">+ Add vehicle</button><span style="font-size:12px;color:var(--soft)">Vehicles + fuel/service logs added in the app appear here automatically.</span></div>
+      <div class="filters"><span style="font-size:12px;color:var(--soft)">Vehicles + fuel/service logs added in the app appear here automatically.</span></div>
       <div id="vehList"><div class="loading">Loading vehicles…</div></div>
       <div class="sec" style="margin-top:20px">⛽ FUEL & TRAVEL COST — BY FIELD USER ${RANGE.label!=="All time"?"· "+esc(RANGE.label):""}</div>
       <div class="grid">${stat("Fuel spend",money(totalFuel),'hero')}${stat("Distance",Math.round(totalKm)+" km")}${stat("Cost / km",totalKm?money(totalFuel/totalKm):"—")}${stat("Driver + wages",money(totalDriver))}</div>

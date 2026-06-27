@@ -208,19 +208,9 @@ class AppViewModel @Inject constructor(
         localStore.updateCompany(c.copy(creatives = c.creatives + name))
     }
 
-    fun removeCreative(name: String) {
-        val c = state.value.selectedCompany ?: return
-        localStore.updateCompany(c.copy(creatives = c.creatives - name))
-    }
-
     fun addMediaType(name: String) {
         val c = state.value.selectedCompany ?: return
         localStore.updateCompany(c.copy(mediaTypes = c.mediaTypes + name))
-    }
-
-    fun removeMediaType(name: String) {
-        val c = state.value.selectedCompany ?: return
-        localStore.updateCompany(c.copy(mediaTypes = c.mediaTypes - name))
     }
 
     fun addCapturedPhoto(path: String) {

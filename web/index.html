@@ -1117,6 +1117,7 @@ async function renderFleet(){
   try{ const fl=await getDocs(collection(db,"fleet")); FLEET=fl.docs.map(d=>({id:d.id,...d.data()})); }catch(e){}
   const V=FLEET.slice().sort((a,b)=>(a.name||a.number||"").localeCompare(b.name||b.number||""));
   if(_fleetView==="services") return renderFleetServices(V);
+  if(_fleetView==="maint") return renderFleetMaintenance(V);
   const bikes=V.filter(v=>v.type==="Bike").length, fourw=V.length-bikes;
   const ecs=V.map(v=>vehEconomy(v)).filter(x=>x>0), avgEc=ecs.length?Math.round(ecs.reduce((a,b)=>a+b,0)/ecs.length):0;
   // This-month aggregates (km + fuel + ₹/km) — primary fleet metrics
@@ -1133,7 +1134,7 @@ async function renderFleet(){
   $("#fleet").innerHTML=`
     <div style="display:flex;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:14px">
       <div style="flex:1;min-width:150px;font-size:18px;font-weight:800">Fleet · ${V.length} vehicle${V.length===1?"":"s"}</div>
-      <div class="filters" style="gap:4px;background:var(--bg);border-radius:50px;padding:3px"><button class="btn fvTab" data-v="vehicles" style="background:var(--brand);color:var(--brand-text);border-radius:50px;padding:6px 14px;font-size:13px;font-weight:700;border:none">🚗 Vehicles</button><button class="btn fvTab" data-v="services" style="background:transparent;color:var(--soft);border-radius:50px;padding:6px 14px;font-size:13px;font-weight:700;border:none">🔧 Service history</button></div>
+      <div class="filters" style="gap:4px;background:var(--bg);border-radius:50px;padding:3px">${["vehicles","maint","services"].map(k=>{ const lbl=k==="vehicles"?"🚗 Vehicles":k==="maint"?"🛠 Maintenance":"🔧 Service history"; const on=_fleetView===k; return `<button class="btn fvTab" data-v="${k}" style="background:${on?'var(--brand)':'transparent'};color:${on?'var(--brand-text)':'var(--soft)'};border-radius:50px;padding:6px 14px;font-size:13px;font-weight:700;border:none">${lbl}</button>`; }).join("")}</div>
       <button class="btn" id="flLog">↓ Fuel log</button>
       <button class="btn y" id="vManage">🚗 Manage vehicles</button>
     </div>
@@ -1182,6 +1183,49 @@ async function renderFleet(){
   document.querySelectorAll("#fleet .vQSvc").forEach(b=>b.onclick=e=>{ e.stopPropagation(); const v=V.find(x=>x.id===b.dataset.id); if(v) serviceForm(v); });
 }
 // Service history — flat list of every service log across all vehicles (separate Fleet tab).
+// Maintenance & Repair — flat list of every maintItem across vehicles, status (overdue / in Xkm / not set), Service vs Repair filter.
+let _maintFilter="all";
+function renderFleetMaintenance(V){
+  const all=[]; V.forEach(v=>(v.maintItems||[]).forEach(mi=>{ const cat=maintCatOf(mi.name); const km=v.currentKm||0; let status="not-set", rem=0; if(mi.lastKm>0&&mi.intervalKm>0){ rem=mi.lastKm+mi.intervalKm-km; status=rem<=0?"overdue":rem<=500?"due":"ok"; } all.push({v,mi,cat,status,rem}); }));
+  const order={overdue:0,due:1,ok:2,"not-set":3};
+  all.sort((a,b)=>order[a.status]-order[b.status]||a.rem-b.rem);
+  const filtered=all.filter(o=>_maintFilter==="all"?true:_maintFilter==="due"?(o.status==="overdue"||o.status==="due"):_maintFilter==="service"?o.cat==="Service":_maintFilter==="repair"?o.cat==="Repair":true);
+  const counts={overdue:all.filter(o=>o.status==="overdue").length,due:all.filter(o=>o.status==="due").length,ok:all.filter(o=>o.status==="ok").length,notset:all.filter(o=>o.status==="not-set").length};
+  const tab=(k,l,n)=>{ const on=_maintFilter===k; return `<button class="mfTab" data-f="${k}" style="background:${on?'var(--brand)':'transparent'};color:${on?'var(--brand-text)':'var(--soft)'};border-radius:50px;padding:6px 14px;font-size:12.5px;font-weight:700;cursor:pointer;border:none">${l}${n!=null?` <span style="opacity:.65">${n}</span>`:""}</button>`; };
+  const statusCell=o=>{ if(o.status==="overdue") return `<span class="pill" style="background:#FBEAE5;color:var(--danger)">⚠ Overdue ${(-o.rem).toLocaleString("en-IN")} km</span>`;
+    if(o.status==="due") return `<span class="pill" style="background:#FFF6DC;color:var(--brand-d)">Due in ${o.rem.toLocaleString("en-IN")} km</span>`;
+    if(o.status==="ok") return `<span class="pill" style="background:#E8F5EC;color:#1B873F">✓ ${o.rem.toLocaleString("en-IN")} km left</span>`;
+    return `<span class="pill" style="background:var(--line);color:var(--soft)">Not set</span>`; };
+  $("#fleet").innerHTML=`
+    <div style="display:flex;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:14px">
+      <div style="flex:1;min-width:150px;font-size:18px;font-weight:800">Fleet · ${V.length} vehicle${V.length===1?"":"s"}</div>
+      <div class="filters" style="gap:4px;background:var(--bg);border-radius:50px;padding:3px">${["vehicles","maint","services"].map(k=>{ const lbl=k==="vehicles"?"🚗 Vehicles":k==="maint"?"🛠 Maintenance":"🔧 Service history"; const on=_fleetView===k; return `<button class="btn fvTab" data-v="${k}" style="background:${on?'var(--brand)':'transparent'};color:${on?'var(--brand-text)':'var(--soft)'};border-radius:50px;padding:6px 14px;font-size:13px;font-weight:700;border:none">${lbl}</button>`; }).join("")}</div>
+      <button class="btn" id="mfXls">↓ Export Excel</button>
+    </div>
+    <div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(150px,1fr));margin-bottom:14px">
+      <div class="card" style="padding:13px"><div style="font-size:24px;font-weight:800;color:var(--danger)">${counts.overdue}</div><div style="font-size:11px;letter-spacing:.4px;color:var(--soft);font-weight:700">OVERDUE</div></div>
+      <div class="card" style="padding:13px"><div style="font-size:24px;font-weight:800;color:var(--brand-d)">${counts.due}</div><div style="font-size:11px;letter-spacing:.4px;color:var(--soft);font-weight:700">DUE SOON (≤500 km)</div></div>
+      <div class="card" style="padding:13px"><div style="font-size:24px;font-weight:800;color:#1B873F">${counts.ok}</div><div style="font-size:11px;letter-spacing:.4px;color:var(--soft);font-weight:700">OK</div></div>
+      <div class="card" style="padding:13px"><div style="font-size:24px;font-weight:800;color:var(--soft)">${counts.notset}</div><div style="font-size:11px;letter-spacing:.4px;color:var(--soft);font-weight:700">NOT SET</div></div>
+    </div>
+    <div class="filters" id="mfTabs" style="gap:7px;margin-bottom:12px">${tab("all","All",all.length)}${tab("due","Needs action",counts.overdue+counts.due)}${tab("service","🔧 Service",all.filter(o=>o.cat==="Service").length)}${tab("repair","🛠️ Repair",all.filter(o=>o.cat==="Repair").length)}</div>
+    ${filtered.length?`<div class="tablewrap"><table>
+      <tr><th>Vehicle</th><th>Item</th><th>Type</th><th>Interval</th><th>Last @</th><th>Current km</th><th>Status</th><th></th></tr>
+      ${filtered.map(o=>`<tr><td class="wrap"><b>${esc(o.v.number||o.v.name||"Vehicle")}</b>${o.v.model?`<br><span style="color:var(--soft);font-size:11px">${esc(o.v.model)}</span>`:""}</td>
+        <td><b>${esc(o.mi.name)}</b></td>
+        <td><span style="font-size:11px;font-weight:700;color:${o.cat==="Service"?"var(--brand-d)":"#8B5E3C"}">${o.cat==="Service"?"🔧 Service":"🛠️ Repair"}</span></td>
+        <td>${o.mi.intervalKm?(o.mi.intervalKm.toLocaleString("en-IN")+" km"):"—"}</td>
+        <td>${o.mi.lastKm?(o.mi.lastKm.toLocaleString("en-IN")+" km"):"—"}</td>
+        <td>${(o.v.currentKm||0).toLocaleString("en-IN")} km</td>
+        <td>${statusCell(o)}</td>
+        <td><button class="btn mfLog" data-vid="${esc(o.v.id)}" data-item="${esc(o.mi.name)}" style="padding:4px 10px;font-size:11.5px" title="Log a service / repair for this item">+ Log</button></td>
+      </tr>`).join("")}
+    </table></div>`:`<div class="card loading">No maintenance items.</div>`}`;
+  document.querySelectorAll("#fleet .fvTab").forEach(b=>b.onclick=()=>{ _fleetView=b.dataset.v; renderFleet(); });
+  document.querySelectorAll("#fleet .mfTab").forEach(b=>b.onclick=()=>{ _maintFilter=b.dataset.f; renderFleet(); });
+  document.querySelectorAll("#fleet .mfLog").forEach(b=>b.onclick=()=>{ const v=V.find(x=>x.id===b.dataset.vid); if(v) serviceForm(v); });
+  $("#mfXls").onclick=()=>{ const H=["Vehicle","Item","Type","Interval (km)","Last @ km","Current km","Remaining km","Status"]; const rows=filtered.map(o=>[o.v.number||o.v.name||"",o.mi.name,o.cat,o.mi.intervalKm||"",o.mi.lastKm||"",o.v.currentKm||0,o.status==="overdue"?(-o.rem):(o.status==="due"||o.status==="ok"?o.rem:""),o.status==="overdue"?"Overdue":o.status==="due"?"Due soon":o.status==="ok"?"OK":"Not set"]); xlsx("fleet_maintenance",H,rows); };
+}
 function renderFleetServices(V){
   const all=[]; V.forEach(v=>(v.serviceLogs||[]).forEach(s=>all.push({v,s})));
   all.sort((a,b)=>(b.s.date||0)-(a.s.date||0));
@@ -1492,6 +1536,72 @@ function sizeStr(mi){ return (mi&&mi.width&&mi.height)?(numTrim(mi.width)+"×"+n
 // Flatten recces → one install UNIT per media-size (key = recceId#mediaIndex). Approval/install/POE are per size.
 function installUnits(recces){ const out=[]; for(const r of recces){ const items=(r.media&&r.media.length)?r.media:[{idx:0,type:"",creative:"",width:0,height:0,unit:"",photos:r.photos||[]}]; items.forEach(mi=>{ const key=r.id+"#"+(mi.idx||0); out.push({r,mi,key,i:INSTALL[key]||{},fi:(DATA.appInstall||{})[key]||null}); }); } return out; }
 async function setInstall(id,fields){ if(!id) return; try{ INSTALL[id]={...(INSTALL[id]||{}),...fields,by:(auth.currentUser&&auth.currentUser.email)||"",at:Date.now()}; await setDoc(doc(db,"installations",id),INSTALL[id],{merge:true}); }catch(e){ alert("Save failed: "+(e.message||e)); } }
+// Bulk import install status from an Excel/CSV. Matches rows to existing recce×media units by Shop + Media type (+ optional size).
+function importInstallDialog(projectName, units, onDone){
+  const m=$("#modal"); m.classList.remove("hidden");
+  const apprOpts=INSTALL_APPROVALS.map(a=>a||"(blank)").join(" / ");
+  const instOpts=INSTALL_STATUS.join(" / ");
+  m.innerHTML=`<div class="modalbox"><h3 style="margin:0 0 4px">📥 Import install status · ${esc(projectName)}</h3>
+    <div style="font-size:12px;color:var(--soft);margin-bottom:10px">Upload an <b>Excel / CSV</b> with columns: <b>Shop</b>, <b>Media</b>, <i>Size</i> (optional), <b>Approval</b>, <b>Install</b>, <i>Remark</i> (optional). Rows are matched to existing recces by shop + media (case-insensitive). Approval: ${esc(apprOpts)}. Install: ${esc(instOpts)}.</div>
+    <div class="filters"><button class="btn" id="iiTpl">⬇ Template</button><button class="btn" id="iiPick">⬆ Choose file</button><span id="iiFn" style="font-size:12px;color:var(--soft);align-self:center">No file chosen</span><input type="file" id="iiFile" accept=".xlsx,.xls,.csv,.txt" style="display:none"></div>
+    <div id="iiPrev" style="margin-top:12px;font-size:12.5px;max-height:300px;overflow:auto"></div>
+    <div style="text-align:right;margin-top:12px"><button class="btn" id="iiCancel">Cancel</button> <button class="btn y" id="iiApply" disabled>Apply</button></div></div>`;
+  m.onclick=ev=>{ if(ev.target===m) m.classList.add("hidden"); };
+  $("#iiCancel").onclick=()=>m.classList.add("hidden");
+  $("#iiPick").onclick=()=>$("#iiFile").click();
+  $("#iiTpl").onclick=()=>{
+    const rows=units.slice(0,Math.min(units.length,20)).map(o=>[o.r.shop||"",o.mi.type||"",sizeStr(o.mi)||"","Approved","Installed",""]);
+    if(!rows.length) rows.push(["Sharma Cloth Store","Standee","24×48","Approved","Installed","clean fit"]);
+    xlsx("install_template_"+projectName.replace(/[^a-z0-9]+/gi,"_"),["Shop","Media","Size","Approval","Install","Remark"],rows);
+  };
+  let pendingUpdates=[];
+  const norm=s=>(s||"").toString().trim().toLowerCase().replace(/\s+/g," ");
+  const validAppr=new Set(INSTALL_APPROVALS.map(a=>a.toLowerCase()));
+  const validInst=new Set(INSTALL_STATUS.map(s=>s.toLowerCase()));
+  $("#iiFile").onchange=async e=>{
+    const f=e.target.files[0]; if(!f) return;
+    $("#iiFn").textContent=f.name;
+    try{
+      const buf=await f.arrayBuffer();
+      const wb=XLSX.read(buf,{type:"array"});
+      const sh=wb.Sheets[wb.SheetNames[0]];
+      const rows=XLSX.utils.sheet_to_json(sh,{defval:"",raw:false});
+      const matched=[], skipped=[];
+      rows.forEach((r,idx)=>{
+        const get=keys=>{ for(const k of Object.keys(r)){ const kn=k.trim().toLowerCase(); if(keys.some(x=>kn===x||kn.startsWith(x))) return r[k]; } return ""; };
+        const shop=get(["shop","store","outlet"]), media=get(["media","type"]), size=get(["size"]), appr=get(["approval","appr"]), inst=get(["install","status"]), rem=get(["remark","note","comment"]);
+        if(!shop){ skipped.push({idx:idx+2,reason:"no shop name",row:r}); return; }
+        const nShop=norm(shop), nMedia=norm(media), nSize=norm(size);
+        const candidates=units.filter(o=>norm(o.r.shop)===nShop && (!nMedia||norm(o.mi.type)===nMedia));
+        const hit = nSize ? (candidates.find(o=>norm(sizeStr(o.mi))===nSize)||candidates[0]) : candidates[0];
+        if(!hit){ skipped.push({idx:idx+2,reason:`no recce match for "${shop}"${media?" / "+media:""}${size?" · "+size:""}`,row:r}); return; }
+        const fields={};
+        if(appr!==""){ const a=String(appr).trim(); if(a==="-"||a==="—"){ fields.approval=""; } else if(validAppr.has(a.toLowerCase())){ fields.approval=INSTALL_APPROVALS.find(x=>x.toLowerCase()===a.toLowerCase()); } else { skipped.push({idx:idx+2,reason:`unknown approval "${a}" (use ${apprOpts})`,row:r}); return; } }
+        if(inst!==""){ const i=String(inst).trim(); if(validInst.has(i.toLowerCase())){ fields.install=INSTALL_STATUS.find(x=>x.toLowerCase()===i.toLowerCase()); } else { skipped.push({idx:idx+2,reason:`unknown install "${i}" (use ${instOpts})`,row:r}); return; } }
+        if(rem!=="") fields.remark=String(rem).trim();
+        if(Object.keys(fields).length===0){ skipped.push({idx:idx+2,reason:"nothing to update (approval/install/remark all blank)",row:r}); return; }
+        matched.push({hit,fields,shop,media,size});
+      });
+      pendingUpdates=matched;
+      $("#iiPrev").innerHTML=`<div style="margin-bottom:6px"><b>${matched.length}</b> matched · <b style="color:${skipped.length?'var(--danger)':'var(--soft)'}">${skipped.length}</b> skipped</div>`+
+        (matched.length?`<div style="border:1px solid var(--line);border-radius:9px;padding:8px 10px;margin-bottom:8px;max-height:140px;overflow:auto"><div style="font-size:10.5px;font-weight:700;color:var(--soft);margin-bottom:4px">WILL UPDATE</div>${matched.slice(0,30).map(o=>`<div style="padding:3px 0;border-bottom:1px solid var(--line);font-size:11.5px"><b>${esc(o.hit.r.shop)}</b> · ${esc(o.hit.mi.type||"—")}${sizeStr(o.hit.mi)?" · "+esc(sizeStr(o.hit.mi)):""} → ${esc(JSON.stringify(o.fields))}</div>`).join("")}${matched.length>30?`<div style="padding:4px 0;color:var(--soft)">+${matched.length-30} more…</div>`:""}</div>`:"")+
+        (skipped.length?`<div style="border:1px solid #E6A6A6;background:#FBECEC;border-radius:9px;padding:8px 10px;max-height:140px;overflow:auto"><div style="font-size:10.5px;font-weight:700;color:#9A2D2D;margin-bottom:4px">SKIPPED</div>${skipped.slice(0,30).map(s=>`<div style="padding:3px 0;font-size:11.5px;color:#9A2D2D">Row ${s.idx}: ${esc(s.reason)}</div>`).join("")}${skipped.length>30?`<div style="padding:4px 0;color:#9A2D2D">+${skipped.length-30} more…</div>`:""}</div>`:"");
+      $("#iiApply").disabled = matched.length===0;
+    }catch(err){ $("#iiPrev").innerHTML=`<div style="color:var(--danger);font-size:13px">Could not read file: ${esc(err.message||err)}</div>`; pendingUpdates=[]; $("#iiApply").disabled=true; }
+  };
+  $("#iiApply").onclick=async()=>{
+    if(!pendingUpdates.length) return;
+    const btn=$("#iiApply"); btn.disabled=true; btn.textContent="Applying…";
+    let ok=0, fail=0;
+    for(const o of pendingUpdates){
+      try{ await setInstall(o.hit.key, o.fields); if(o.fields.approval==="Approved") await pushInstallList(o.hit.r, o.hit.mi, true); ok++; }catch(e){ fail++; }
+    }
+    logAudit("install",`Imported ${ok} install row(s) for ${projectName}${fail?` · ${fail} failed`:""}`);
+    m.classList.add("hidden");
+    alert(`Imported ✓  ${ok} updated${fail?` · ${fail} failed`:""}.`);
+    if(typeof onDone==="function") onDone();
+  };
+}
 // On approve: push the SIZE to the field user's assignments/{uid}.installList so their app pulls it. Un-approve removes it.
 async function pushInstallList(rec, mi, approved){
   if(!rec||!rec.uid||!rec.id||!mi) return;
@@ -1560,7 +1670,7 @@ function renderInstallDetail(name){
     <div class="filters">
       <select id="iView"><option value="">All sizes</option><option value="approved">Approved</option><option value="pending">Approved · pending install</option><option value="installed">Installed</option><option value="issue">Issues</option></select>
       <select id="iScope"><option value="installed">POE: Installed only</option><option value="approved">POE: All approved</option></select>
-      <button class="btn y" id="iXls">📊 Excel</button><button class="btn y" id="iPpt">📑 POE PPT</button><button class="btn y" id="iPdf">📄 POE PDF</button>
+      <button class="btn" id="iImport">📥 Import status</button><button class="btn y" id="iXls">📊 Excel</button><button class="btn y" id="iPpt">📑 POE PPT</button><button class="btn y" id="iPdf">📄 POE PDF</button>
     </div>
     <div id="iStats" class="grid" style="grid-template-columns:repeat(auto-fit,minmax(120px,1fr));margin-bottom:10px"></div>
     <div id="iList" class="tablewrap"></div>
@@ -1604,6 +1714,7 @@ function renderInstallDetail(name){
   $("#iXls").onclick=()=>installExcel(recces);
   $("#iPpt").onclick=()=>installPpt(recces, $("#iScope").value);
   $("#iPdf").onclick=()=>installPdf(recces, $("#iScope").value);
+  $("#iImport").onclick=()=>importInstallDialog(name, installUnits(recces), draw);
   wirePT();
   draw();
 }

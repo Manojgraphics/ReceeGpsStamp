@@ -953,7 +953,9 @@ function renderFleet(){
 }
 // ── Vehicles — full fleet management on the shared `fleet` collection (app + web, one source) ──
 const FLEET_TYPES=["Bike","Car","Transport vehicle","Other"];
-const FLEET_DEFAULT_MAINT=[["Oil change",3000],["Oil Filter",5000],["Air filter",10000],["Fuel Filter",20000],["Service",5000],["Wheel alignment",5000],["Brake",10000],["Clutch",20000],["Coolant",20000],["Battery",15000],["Tyre",30000]];
+const FLEET_DEFAULT_MAINT=[["Oil change",3000,"Service"],["Oil Filter",5000,"Service"],["Air filter",10000,"Service"],["Fuel Filter",20000,"Service"],["AC / Cabin filter",15000,"Service"],["Coolant",20000,"Service"],["Wheel alignment",5000,"Service"],["Greasing",5000,"Service"],["Service",5000,"Service"],["Brake liner",15000,"Repair"],["Brake",10000,"Repair"],["Clutch",20000,"Repair"],["Suspension",40000,"Repair"],["Battery",15000,"Repair"],["Tyre",30000,"Repair"],["Wiper blades",10000,"Repair"]];
+const MAINT_CAT={}; FLEET_DEFAULT_MAINT.forEach(([n,k,c])=>{ MAINT_CAT[n.toLowerCase()]=c||"Service"; }); MAINT_CAT.def="Service";
+const maintCatOf=name=>MAINT_CAT[(name||"").toLowerCase()]||"Service"; // Service vs Repair grouping
 const fleetRid=()=>Math.random().toString(36).slice(2,10);
 function vehEconomy(v){ const s=(v.fuelLogs||[]).filter(f=>f.odometer>0&&f.litres>0).sort((a,b)=>a.odometer-b.odometer); if(s.length<2)return 0; const dist=s[s.length-1].odometer-s[0].odometer, lit=s.reduce((a,b)=>a+(b.litres||0),0)-s[0].litres; return (lit>0&&dist>0)?dist/lit:0; }
 // Mileage for the latest tank (between the last two fills) — km covered ÷ litres put in at the last fill.
@@ -987,9 +989,7 @@ function openVehicle(v){
     <div style="font-size:11.5px;color:var(--soft);margin-top:3px">⛽ Mileage — this trip: <b style="color:var(--brand-d)">${tm?tm.toFixed(1)+" km/l":"—"}</b> · lifetime: <b style="color:var(--brand-d)">${ec?ec.toFixed(1)+" km/l":"—"}</b></div>
     ${(v.chassis||v.engine||(v.lat&&v.lng))?`<div class="tablewrap" style="margin-top:8px"><table><tr><th>Chassis</th><th>Engine</th><th>Last location</th></tr><tr><td>${esc(v.chassis||"—")}</td><td>${esc(v.engine||"—")}</td><td>${(v.lat&&v.lng)?`<a href="https://maps.google.com/?q=${v.lat},${v.lng}" target="_blank">📍 Map</a>`:"—"}</td></tr></table></div>`:""}
     <div class="sec">MAINTENANCE</div>
-    <div class="tablewrap"><table><tr><th>Item</th><th>Interval</th><th>Last @</th><th>Status</th></tr>
-      ${(v.maintItems||[]).map(mi=>`<tr><td><b>${esc(mi.name)}</b></td><td>${mi.intervalKm||"—"} km</td><td>${mi.lastKm||"—"}</td><td>${dueTxt(mi)}</td></tr>`).join("")||`<tr><td colspan="4" style="color:var(--soft)">—</td></tr>`}
-    </table></div>
+    ${["Service","Repair"].map(cat=>{ const rows=(v.maintItems||[]).filter(mi=>maintCatOf(mi.name)===cat); if(!rows.length) return ""; return `<div style="font-size:11px;color:var(--brand-d);font-weight:800;margin:8px 0 4px;letter-spacing:.3px">${cat==="Service"?"🔧 SERVICE":"🛠️ REPAIR"}</div><div class="tablewrap"><table><tr><th>Item</th><th>Interval</th><th>Last @</th><th>Status</th></tr>${rows.map(mi=>`<tr><td><b>${esc(mi.name)}</b></td><td>${mi.intervalKm||"—"} km</td><td>${mi.lastKm||"—"}</td><td>${dueTxt(mi)}</td></tr>`).join("")}</table></div>`; }).join("")||`<div class="tablewrap"><table><tr><td style="color:var(--soft);padding:10px">No items.</td></tr></table></div>`}
     <div class="sec">DOCUMENTS</div>
     <div class="tablewrap"><table><tr><th>Insurance</th><th>PUC</th>${typeNeedsFitness(v.type)?`<th>Fitness</th>`:``}<th>Next service</th></tr><tr><td>${docTxt(v.insuranceExpiry)}</td><td>${docTxt(v.pucExpiry)}</td>${typeNeedsFitness(v.type)?`<td>${docTxt(v.fitnessExpiry)}</td>`:``}<td>${nextSvc?docTxt(nextSvc):'<span style="color:var(--soft)">not set</span>'}</td></tr></table></div>
     <div class="filters" style="margin-top:12px"><button class="btn y" id="vFuel">⛽ Add fuel</button><button class="btn" id="vSvc">🔧 Add service</button><button class="btn" id="vEdit">Edit</button><button class="btn" id="vDel" style="background:#FBEAE5;color:var(--danger)">Delete</button></div>
@@ -1046,10 +1046,8 @@ function vehicleForm(existing){
         <div><div class="suLbl">Type</div><select id="fType" class="suInp">${FLEET_TYPES.map(t=>`<option ${t===(base.type||"Bike")?"selected":""}>${t}</option>`).join("")}</select></div>
         <div><div class="suLbl">Current odometer (km)</div><input type="number" id="fKm" class="suInp" value="${base.currentKm||""}"></div>
       </div>
-      <div class="suLbl" style="margin-top:18px">Service intervals (km) — model-wise</div>
-      <div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(160px,1fr))">
-        ${items.map((mi,i)=>`<div><div style="font-size:11px;color:var(--soft);margin-bottom:3px">${esc(mi.name)} every</div><input type="number" class="fIv suInp" data-i="${i}" value="${mi.intervalKm||""}"></div>`).join("")}
-      </div>
+      <div class="suLbl" style="margin-top:18px">Service &amp; repair intervals (km) — model-wise</div>
+      ${["Service","Repair"].map(cat=>{ const g=items.map((mi,i)=>({mi,i})).filter(o=>maintCatOf(o.mi.name)===cat); if(!g.length) return ""; return `<div style="font-size:11px;color:var(--brand-d);font-weight:800;margin:10px 0 4px;letter-spacing:.3px">${cat==="Service"?"🔧 SERVICE":"🛠️ REPAIR"}</div><div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(160px,1fr))">${g.map(({mi,i})=>`<div><div style="font-size:11px;color:var(--soft);margin-bottom:3px">${esc(mi.name)} every</div><input type="number" class="fIv suInp" data-i="${i}" value="${mi.intervalKm||""}"></div>`).join("")}</div>`; }).join("")}
       <div style="margin-top:16px;display:flex;align-items:center;gap:14px;flex-wrap:wrap;border-top:1px solid var(--line);padding-top:14px">
         <label style="display:inline-flex;align-items:center;gap:7px;font-size:13.5px;cursor:pointer"><input type="checkbox" id="fDef" ${_defMI?"checked":""}> Uses DEF (AdBlue)</label>
         <div id="fDefWrap" style="align-items:center;gap:8px;${_defMI?"display:flex":"display:none"}"><span style="font-size:11px;color:var(--soft)">DEF refill every (km)</span><input type="number" id="fDefKm" class="suInp" style="width:140px" value="${_defMI?(_defMI.intervalKm||""):8000}"></div>
@@ -1099,7 +1097,7 @@ function serviceForm(v){
   const m=$("#modal"); m.classList.remove("hidden");
   m.innerHTML=`<div class="modalbox"><h3 style="margin:0 0 8px">🔧 Add service — ${esc(v.name||v.number)}</h3>
     <div style="font-size:11px;color:var(--soft)">What was done — tick all that apply</div>
-    <div id="svItems" style="display:flex;flex-wrap:wrap;gap:6px;margin:6px 0 8px">${types.map(t=>`<label style="display:inline-flex;align-items:center;gap:5px;border:1px solid var(--line);border-radius:9px;padding:5px 10px;cursor:pointer;font-size:13px"><input type="checkbox" class="svItem" value="${esc(t)}">${esc(t)}</label>`).join("")}</div>
+    <div id="svItems" style="margin:6px 0 8px">${["Service","Repair"].map(cat=>{ const g=(v.maintItems||[]).map(mi=>mi.name).filter(n=>maintCatOf(n)===cat); if(!g.length) return ""; return `<div style="font-size:10.5px;color:var(--brand-d);font-weight:800;margin:6px 0 3px">${cat==="Service"?"🔧 SERVICE":"🛠️ REPAIR"}</div><div style="display:flex;flex-wrap:wrap;gap:6px">${g.map(t=>`<label style="display:inline-flex;align-items:center;gap:5px;border:1px solid var(--line);border-radius:9px;padding:5px 10px;cursor:pointer;font-size:13px"><input type="checkbox" class="svItem" value="${esc(t)}">${esc(t)}</label>`).join("")}</div>`; }).join("")}<div style="margin-top:8px"><label style="display:inline-flex;align-items:center;gap:5px;border:1px solid var(--line);border-radius:9px;padding:5px 10px;cursor:pointer;font-size:13px"><input type="checkbox" class="svItem" value="Other">Other</label></div></div>
     <div class="filters"><input type="date" id="svDate" value="${new Date().toISOString().slice(0,10)}" title="Service date (back-date allowed)"><input type="number" id="svOdo" placeholder="Odometer (km)" value="${v.currentKm||""}"><input type="number" id="svAmt" placeholder="Total ₹"><input type="number" id="svLab" placeholder="Labour ₹"></div>
     <div class="filters" style="margin-top:8px"><input type="text" id="svGarage" placeholder="Garage / service center"><input type="tel" id="svGaragePhone" placeholder="Garage phone" maxlength="10"><input type="text" id="svNote" placeholder="Note"></div>
     <div class="filters" style="margin-top:8px;align-items:center;gap:8px"><span style="font-size:11px;color:var(--soft)">Next service due</span><input type="date" id="svNextDue"><span style="font-size:11px;color:var(--soft)">Bill (photo/PDF)</span><input type="file" id="svBill" accept="image/*,application/pdf"></div>

@@ -106,7 +106,16 @@
     .nav-item{flex:0 0 auto;white-space:nowrap;padding:8px 12px;font-size:13px}
     .nav-item.on::before{left:8px;right:8px;top:auto;bottom:0;width:auto;height:3px;border-radius:3px 3px 0 0}
     .main{padding:14px 12px 50px}
-    .modalbox{max-width:94vw}
+    .modalbox{max-width:94vw;padding:14px 12px}
+    /* Fleet — KPI strip stacks 2-col, vehicle stat block tightens, tab bar wraps */
+    #fleet .grid[style*="minmax(160px"],#fleet .grid[style*="minmax(180px"]{grid-template-columns:repeat(2,1fr)!important}
+    #fleet .card{padding:13px 12px}
+    .fvTab,.vTab,.mfTab,.exTab,.lbTab,.anWin{padding:6px 10px!important;font-size:11.5px!important}
+    .filters{gap:6px;flex-wrap:wrap}
+    /* Tables horizontal scroll already from .tablewrap */
+    table th,table td{padding:8px 9px;font-size:12px}
+    /* Stat blocks readability */
+    .stat .v{font-size:18px}
   }
 </style>
 </head>
@@ -1127,7 +1136,15 @@ async function renderFleet(){
   const expired=allAlerts.filter(o=>/EXPIRED|OVERDUE/.test(o.a)).length, due=allAlerts.length-expired;
   const kpi=(lbl,val,ic,sub,red)=>`<div class="card" style="padding:15px"><div style="display:flex;align-items:center;justify-content:space-between"><span style="font-size:11px;font-weight:800;letter-spacing:.4px;color:var(--soft)">${lbl}</span><span style="font-size:15px">${ic}</span></div><div style="font-size:28px;font-weight:800;margin-top:4px;color:${red?'var(--danger)':'var(--ink)'}">${val}</div><div style="font-size:11px;color:${red?'var(--danger)':'var(--brand-d)'};margin-top:2px">${sub}</div></div>`;
   const ymShort=e=>{ const d=new Date(e); return d.toLocaleDateString("en-IN",{month:"short"})+" '"+String(d.getFullYear()).slice(-2); };
-  const docPill=(lbl,e,need)=>{ if(need===false) return `<span class="pill" style="background:var(--line);color:var(--soft)">${lbl} n/a</span>`; if(!(e>0)) return `<span class="pill" style="background:var(--line);color:var(--soft)">${lbl} —</span>`; const x=Math.floor((e-Date.now())/86400000); return x<0?`<span class="pill" style="background:#FBEAE5;color:var(--danger)">${lbl} ✗ expired</span>`:`<span class="pill" style="background:#FFF6DC;color:var(--brand-d)">${lbl} ✓ ${ymShort(e)}</span>`; };
+  // Highlighted document pill: red bold for expired (with days overdue), amber for expiring ≤30d (with days left), green for valid.
+  const docPill=(lbl,e,need)=>{ const base="display:inline-flex;align-items:center;gap:4px;padding:5px 10px;border-radius:50px;font-size:11.5px;font-weight:800;line-height:1";
+    if(need===false) return `<span style="${base};background:var(--line);color:var(--soft);font-weight:700">${lbl} n/a</span>`;
+    if(!(e>0)) return `<span style="${base};background:#FBEAE5;color:var(--danger);border:1px dashed var(--danger)">${lbl} ✗ not set</span>`;
+    const x=Math.floor((e-Date.now())/86400000);
+    if(x<0) return `<span style="${base};background:var(--danger);color:#fff;box-shadow:0 0 0 2px rgba(179,38,30,.15)" title="Expired ${-x} day${-x===1?"":"s"} ago">${lbl} ✗ EXPIRED ${-x}d</span>`;
+    if(x<=30) return `<span style="${base};background:#FFE082;color:#7a4a00;border:1px solid #E0A93B" title="Expires in ${x} day${x===1?"":"s"} (${ymShort(e)})">${lbl} ⚠ ${x}d left</span>`;
+    return `<span style="${base};background:#D4EDDA;color:#1B873F" title="Valid till ${ymShort(e)}">${lbl} ✓ ${ymShort(e)}</span>`;
+  };
   const svcLine=v=>{ const km=v.currentKm||0; let best=null; (v.maintItems||[]).forEach(mi=>{ if(mi.lastKm>0&&mi.intervalKm>0){ const rem=mi.lastKm+mi.intervalKm-km; if(best===null||rem<best.rem) best={name:mi.name,rem}; } }); if(!best) return `<span style="color:var(--soft)">🔧 No service interval set</span>`; if(best.rem<=0) return `<span style="color:var(--danger)">🔧 ${esc(best.name)} overdue <b>${-best.rem} km</b></span>`; return `<span style="color:var(--soft)">🔧 ${esc(best.name)} in <b>${best.rem.toLocaleString("en-IN")} km</b></span>`; };
   const lastFuelLine=v=>{ const logs=(v.fuelLogs||[]).slice().sort((a,b)=>(b.date||0)-(a.date||0)); if(!logs.length) return `<span style="color:var(--soft)">⛽ No fuel logs yet</span>`; const f=logs[0]; const rate=f.ratePerLitre||(f.litres?(f.amount||0)/f.litres:0); return `<span style="color:var(--soft)">⛽ <b style="color:var(--ink)">${(f.litres||0).toFixed(2)} L</b> · <b style="color:var(--ink)">${money(f.amount||0)}</b>${rate?` @ ₹${rate.toFixed(2)}`:""} · ${fmtDate(f.date)}</span>`; };
   const typeIc=t=>t==="Bike"?"🏍️":(t==="Transport vehicle"||t==="Transport")?"🚚":"🚗";
@@ -1249,7 +1266,7 @@ function renderFleetServices(V){
       ${filtered.map(o=>{ const s=o.s, v=o.v;
         return `<tr><td style="white-space:nowrap">${fmtDate(s.date)}</td>
           <td class="wrap"><b>${esc(v.number||v.name||"Vehicle")}</b>${v.model?`<br><span style="color:var(--soft);font-size:11px">${esc(v.model)}</span>`:""}</td>
-          <td class="wrap">${esc(s.type||"—")}${s.project?`<br><span style="color:var(--soft);font-size:11px">📁 ${esc(s.project)}</span>`:""}${s.note?`<br><span style="color:var(--soft);font-size:11px">${esc(s.note)}</span>`:""}</td>
+          <td class="wrap">${typeBadges(s.type)}${s.project?`<br><span style="color:var(--soft);font-size:11px">📁 ${esc(s.project)}</span>`:""}${s.note?`<br><span style="color:var(--soft);font-size:11px">${esc(s.note)}</span>`:""}</td>
           <td>${(s.odometer||0).toLocaleString("en-IN")}</td>
           <td style="font-weight:700">${money(s.amount||0)}</td>
           <td>${s.labour?money(s.labour):"—"}</td>
@@ -1287,11 +1304,13 @@ function manageVehicles(){
 }
 // ── Vehicles — full fleet management on the shared `fleet` collection (app + web, one source) ──
 const FLEET_TYPES=["Bike","Car","Transport vehicle","Other"];
-const FLEET_DEFAULT_MAINT=[["Engine oil",3000,"Service"],["Oil Filter",5000,"Service"],["Air filter",10000,"Service"],["Fuel Filter",20000,"Service"],["AC / Cabin filter",15000,"Service"],["Coolant",20000,"Service"],["Wheel alignment",5000,"Service"],["Greasing",5000,"Service"],["Service",5000,"Service"],["Brake liner",15000,"Repair"],["Brake",10000,"Repair"],["Clutch",20000,"Repair"],["Suspension",40000,"Repair"],["Battery",15000,"Repair"],["Tyre",30000,"Repair"],["Wiper blades",10000,"Repair"]];
+const FLEET_DEFAULT_MAINT=[["Engine oil",3000,"Service"],["Oil Filter",5000,"Service"],["Air filter",10000,"Service"],["Fuel Filter",20000,"Service"],["AC / Cabin filter",15000,"Service"],["Coolant",20000,"Service"],["Wheel alignment",5000,"Service"],["Greasing",5000,"Service"],["Service",5000,"Service"],["Brake liner",15000,"Repair"],["Brake",10000,"Repair"],["Clutch",20000,"Repair"],["Suspension",40000,"Repair"],["Battery",15000,"Repair"],["Tyre",30000,"Repair"],["Wiper blades",10000,"Repair"],["DEF Clog issue",30000,"Repair"]];
 // Display normalisation: any legacy "Oil change" in existing vehicle docs reads as "Engine oil".
 const normMaintName=n=>{ if(!n)return n; const k=String(n).trim().toLowerCase(); return k==="oil change"?"Engine oil":n; };
 const MAINT_CAT={}; FLEET_DEFAULT_MAINT.forEach(([n,k,c])=>{ MAINT_CAT[n.toLowerCase()]=c||"Service"; }); MAINT_CAT.def="Service";
 const maintCatOf=name=>MAINT_CAT[(name||"").toLowerCase()]||"Service"; // Service vs Repair grouping
+// Split a comma-joined service entry's type into per-item pills with category icon (🔧 Service / 🛠️ Repair).
+function typeBadges(s){ const items=(s||"").split(",").map(x=>x.trim()).filter(Boolean); if(!items.length) return '<span style="color:var(--soft)">—</span>'; return items.map(it=>{ const isRep=maintCatOf(it)==="Repair"; const ic=isRep?"🛠️":"🔧"; const fg=isRep?"#8B5E3C":"var(--brand-d)"; const bg=isRep?"#F5E6D8":"#FFF6DC"; return `<span style="display:inline-flex;align-items:center;gap:3px;background:${bg};color:${fg};border-radius:50px;padding:2px 8px;font-size:11px;font-weight:700;margin:1px 3px 1px 0">${ic} ${esc(it)}</span>`; }).join(""); }
 const fleetRid=()=>Math.random().toString(36).slice(2,10);
 function vehEconomy(v){ const s=(v.fuelLogs||[]).filter(f=>f.odometer>0&&f.litres>0).sort((a,b)=>a.odometer-b.odometer); if(s.length<2)return 0; const dist=s[s.length-1].odometer-s[0].odometer, lit=s.reduce((a,b)=>a+(b.litres||0),0)-s[0].litres; return (lit>0&&dist>0)?dist/lit:0; }
 // Mileage for the latest tank (between the last two fills) — km covered ÷ litres put in at the last fill.
@@ -1347,7 +1366,7 @@ function openVehicle(v){
     ${fuelN?`<div class="tablewrap"><table><tr><th>Date</th><th>Project</th><th>Odometer</th><th>Litres</th><th>₹</th><th></th></tr>${(v.fuelLogs||[]).slice().sort((a,b)=>(b.date||0)-(a.date||0)).map(f=>`<tr><td>${fmtDate(f.date)}</td><td>${esc(f.project||"—")}</td><td>${f.odometer} km</td><td>${(f.litres||0).toFixed(2)}</td><td>${money(f.amount||0)}</td><td style="white-space:nowrap"><span class="logEdit" data-id="${esc(f.id||"")}" title="Edit entry" style="color:var(--brand-d);cursor:pointer;font-weight:700;margin-right:10px">✏️</span><span class="logDel" data-kind="fuel" data-id="${esc(f.id||"")}" title="Delete entry" style="color:var(--danger);cursor:pointer;font-weight:700">✕</span></td></tr>`).join("")}</table></div>`:`<div class="card loading">No fuel logs yet. Tap <b>⛽ Add fuel</b> above.</div>`}`;
   const svcHtml=`
     <div style="display:flex;align-items:center;margin-bottom:10px"><b style="font-size:14.5px">Service log</b><span style="margin-left:auto;font-size:12px;color:var(--soft)">${svcN} entr${svcN===1?"y":"ies"}</span><button class="btn" id="vSvc" style="margin-left:10px">🔧 Add service</button></div>
-    ${svcN?`<div class="tablewrap"><table><tr><th>Date</th><th>Type</th><th>Project</th><th>Odometer</th><th>₹ Total</th><th>Parts</th><th>Labour</th><th>Garage</th><th>Next due</th><th>Bill</th><th></th></tr>${(v.serviceLogs||[]).slice().sort((a,b)=>(b.date||0)-(a.date||0)).map(s=>`<tr><td>${fmtDate(s.date)}</td><td>${esc(s.type||"")}</td><td>${esc(s.project||"—")}</td><td>${s.odometer} km</td><td>${money(s.amount||0)}</td><td>${money(Math.max(0,(s.amount||0)-(s.labour||0)))}</td><td>${s.labour?money(s.labour):"—"}</td><td>${esc(s.garage||"—")}${s.garagePhone?` <a href="tel:${esc(s.garagePhone)}" style="color:var(--brand-d);text-decoration:none">📞</a>`:""}</td><td>${s.nextDue?fmtDate(s.nextDue):"—"}</td><td>${s.billPhoto?`<span class="svBill" data-p="${esc(s.billPhoto)}" title="View bill" style="cursor:pointer;color:var(--brand-d)">${/\.pdf$/i.test(s.billPhoto)?"📄":"📷"}</span>`:"—"}</td><td style="white-space:nowrap"><span class="logEditSvc" data-id="${esc(s.id||"")}" title="Edit entry" style="color:var(--brand-d);cursor:pointer;font-weight:700;margin-right:10px">✏️</span><span class="logDel" data-kind="service" data-id="${esc(s.id||"")}" title="Delete entry" style="color:var(--danger);cursor:pointer;font-weight:700">✕</span></td></tr>`).join("")}</table></div>`:`<div class="card loading">No service logs yet. Tap <b>🔧 Add service</b> above.</div>`}`;
+    ${svcN?`<div class="tablewrap"><table><tr><th>Date</th><th>Type</th><th>Project</th><th>Odometer</th><th>₹ Total</th><th>Parts</th><th>Labour</th><th>Garage</th><th>Next due</th><th>Bill</th><th></th></tr>${(v.serviceLogs||[]).slice().sort((a,b)=>(b.date||0)-(a.date||0)).map(s=>`<tr><td>${fmtDate(s.date)}</td><td class="wrap">${typeBadges(s.type)}</td><td>${esc(s.project||"—")}</td><td>${s.odometer} km</td><td>${money(s.amount||0)}</td><td>${money(Math.max(0,(s.amount||0)-(s.labour||0)))}</td><td>${s.labour?money(s.labour):"—"}</td><td>${esc(s.garage||"—")}${s.garagePhone?` <a href="tel:${esc(s.garagePhone)}" style="color:var(--brand-d);text-decoration:none">📞</a>`:""}</td><td>${s.nextDue?fmtDate(s.nextDue):"—"}</td><td>${s.billPhoto?`<span class="svBill" data-p="${esc(s.billPhoto)}" title="View bill" style="cursor:pointer;color:var(--brand-d)">${/\.pdf$/i.test(s.billPhoto)?"📄":"📷"}</span>`:"—"}</td><td style="white-space:nowrap"><span class="logEditSvc" data-id="${esc(s.id||"")}" title="Edit entry" style="color:var(--brand-d);cursor:pointer;font-weight:700;margin-right:10px">✏️</span><span class="logDel" data-kind="service" data-id="${esc(s.id||"")}" title="Delete entry" style="color:var(--danger);cursor:pointer;font-weight:700">✕</span></td></tr>`).join("")}</table></div>`:`<div class="card loading">No service logs yet. Tap <b>🔧 Add service</b> above.</div>`}`;
   const items=(v.maintItems||[]).map(mi=>({...mi,name:normMaintName(mi.name)}));
   const maintHtml=`
     <div style="display:flex;align-items:center;margin-bottom:10px"><b style="font-size:14.5px">Maintenance status</b><span style="margin-left:auto;font-size:12px;color:var(--soft)">@ ${km.toLocaleString("en-IN")} km</span></div>
@@ -1483,7 +1502,7 @@ function serviceForm(v, edit){
   const sd=edit?new Date(edit.date||Date.now()):new Date();
   const m=$("#modal"); m.classList.remove("hidden");
   m.innerHTML=`<div class="modalbox"><h3 style="margin:0 0 8px">${edit?"✏️ Edit service":"🔧 Add service"} — ${esc(v.name||v.number)}</h3>
-    <div style="font-size:11px;color:var(--soft)">What was done — tick all that apply</div>
+    <div style="font-size:11px;color:var(--soft)">What was done — tick all that apply (Service &amp; Repair items can be combined in one entry)</div>
     <div id="svItems" style="margin:6px 0 8px">${["Service","Repair"].map(cat=>{ const g=(v.maintItems||[]).map(mi=>normMaintName(mi.name)).filter(n=>maintCatOf(n)===cat); if(!g.length) return ""; return `<div style="font-size:10.5px;color:var(--brand-d);font-weight:800;margin:6px 0 3px">${cat==="Service"?"🔧 SERVICE":"🛠️ REPAIR"}</div><div style="display:flex;flex-wrap:wrap;gap:6px">${g.map(t=>`<label style="display:inline-flex;align-items:center;gap:5px;border:1px solid var(--line);border-radius:9px;padding:5px 10px;cursor:pointer;font-size:13px"><input type="checkbox" class="svItem" value="${esc(t)}" ${editTypes.has(t.toLowerCase())?"checked":""}>${esc(t)}</label>`).join("")}</div>`; }).join("")}<div style="margin-top:8px"><label style="display:inline-flex;align-items:center;gap:5px;border:1px solid var(--line);border-radius:9px;padding:5px 10px;cursor:pointer;font-size:13px"><input type="checkbox" class="svItem" value="Other" ${editTypes.has("other")?"checked":""}>Other</label></div></div>
     <div class="filters"><input type="date" id="svDate" value="${sd.toISOString().slice(0,10)}" title="Service date (back-date allowed)"><input type="number" id="svOdo" placeholder="Odometer (km)" value="${edit?(edit.odometer||""):(v.currentKm||"")}"><input type="number" id="svAmt" placeholder="Total ₹" value="${edit?(edit.amount||""):""}"><input type="number" id="svLab" placeholder="Labour ₹" value="${edit?(edit.labour||""):""}"></div>
     <div class="filters" style="margin-top:8px"><input type="text" id="svGarage" placeholder="Garage / service center" value="${edit?esc(edit.garage||""):""}"><input type="tel" id="svGaragePhone" placeholder="Garage phone" maxlength="10" value="${edit?esc(edit.garagePhone||""):""}"><input type="text" id="svNote" placeholder="Note" value="${edit?esc(edit.note||""):""}"></div>

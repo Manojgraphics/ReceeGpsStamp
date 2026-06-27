@@ -699,7 +699,8 @@ function renderExpenses(){
   const advance=sum(e.filter(x=>x.kind==="ADVANCE")), spentYou=sum(e.filter(x=>x.kind==="EXPENSE"&&x.paymentMode!=="Company")),
     company=sum(e.filter(x=>x.kind==="EXPENSE"&&x.paymentMode==="Company")), bal=advance-spentYou;
   const cats={}; e.filter(x=>x.kind==="EXPENSE").forEach(x=>cats[x.category||"Other"]=(cats[x.category||"Other"]||0)+(x.amount||0));
-  const bySur={}; e.forEach(x=>{ const s=bySur[x.surveyor]=bySur[x.surveyor]||{adv:0,sp:0}; if(x.kind==="ADVANCE")s.adv+=x.amount||0; else if(x.paymentMode!=="Company")s.sp+=x.amount||0; });
+  const bySur={}; e.forEach(x=>{ const s=bySur[x.uid]=bySur[x.uid]||{uid:x.uid,name:x.surveyor,adv:0,sp:0}; if(x.kind==="ADVANCE")s.adv+=x.amount||0; else if(x.paymentMode!=="Company")s.sp+=x.amount||0; });
+  const byProj={}; e.filter(x=>x.kind==="EXPENSE").forEach(x=>{ const p=x.projectName||"General"; const o=byProj[p]=byProj[p]||{sp:0,comp:0}; if(x.paymentMode==="Company")o.comp+=x.amount||0; else o.sp+=x.amount||0; });
   const appExp=e.filter(x=>x.kind==="EXPENSE"&&x.paymentMode!=="Company");
   let appr=0,pend=0,rej=0; appExp.forEach(x=>{ const st=apprState(x.uid,x.id); if(st==="approved")appr+=x.amount||0; else if(st==="rejected")rej+=x.amount||0; else pend+=x.amount||0; });
   const expById={}; appExp.forEach(x=>{ expById[x.id]=x; });
@@ -716,9 +717,13 @@ function renderExpenses(){
       <select id="apSt"><option value="">All status</option><option value="pending">Pending</option><option value="approved">Approved</option><option value="rejected">Rejected</option></select>
     </div>
     <div id="apList" class="tablewrap"></div>
-    <div class="sec">BY FIELD USER</div>
-    <div class="tablewrap"><table><tr><th>Field User</th><th>Advance</th><th>Spent</th><th>Balance</th></tr>
-      ${Object.entries(bySur).sort((a,b)=>b[1].sp-a[1].sp).map(([n,s])=>`<tr><td><b>${esc(n)}</b></td><td>${money(s.adv)}</td><td>${money(s.sp)}</td><td>${money(s.adv-s.sp)}</td></tr>`).join("")}
+    <div class="sec">BY FIELD USER — tap 🧾 for the full ledger (khata)</div>
+    <div class="tablewrap"><table><tr><th>Field User</th><th>Advance</th><th>Spent</th><th>Balance</th><th></th></tr>
+      ${Object.values(bySur).sort((a,b)=>b.sp-a.sp).map(s=>`<tr><td><b>${esc(s.name)}</b></td><td>${money(s.adv)}</td><td>${money(s.sp)}</td><td style="font-weight:700;color:${s.adv-s.sp>=0?'var(--green)':'var(--red)'}">${money(s.adv-s.sp)}</td><td><button class="btn ledLink" data-uid="${esc(s.uid)}" style="padding:4px 10px">🧾 Ledger</button></td></tr>`).join("")||`<tr><td colspan="5" style="color:var(--soft);padding:12px">No data.</td></tr>`}
+    </table></div>
+    <div class="sec">BY PROJECT — expense per project</div>
+    <div class="tablewrap"><table><tr><th>Project</th><th>Team spent</th><th>Company-paid</th><th>Total</th></tr>
+      ${Object.entries(byProj).sort((a,b)=>(b[1].sp+b[1].comp)-(a[1].sp+a[1].comp)).map(([p,v])=>`<tr><td><b>${esc(p)}</b></td><td>${money(v.sp)}</td><td>${money(v.comp)}</td><td style="font-weight:700">${money(v.sp+v.comp)}</td></tr>`).join("")||`<tr><td colspan="4" style="color:var(--soft);padding:12px">No data.</td></tr>`}
     </table></div>
     <div class="sec">BY CATEGORY</div>
     <div class="tablewrap"><table><tr><th>Category</th><th>Amount</th></tr>
@@ -742,9 +747,31 @@ function renderExpenses(){
     $("#apList").querySelectorAll(".billLink").forEach(b=>b.onclick=()=>openBills(expById[b.dataset.e]));
   };
   $("#apSur").onchange=$("#apSt").onchange=drawAppr; drawAppr();
+  $("#expenses").querySelectorAll(".ledLink").forEach(b=>b.onclick=()=>openLedger(b.dataset.uid));
   const H=["Field User","Date","Kind","Category","Amount","Project","Payment","Note","Approval"];
   const rows=()=> e.slice().sort((a,b)=>(b.date||0)-(a.date||0)).map(x=>[x.surveyor,fmtDate(x.date),x.kind,x.category,x.amount,x.projectName||"",x.paymentMode||"",x.note||"",x.kind==="EXPENSE"&&x.paymentMode!=="Company"?apprState(x.uid,x.id):""]);
   $("#eCsv").onclick=()=>csv("expenses",H,rows()); $("#eXls").onclick=()=>xlsx("expenses",H,rows()); $("#ePdf").onclick=()=>pdf("Expenses",H,rows());
+}
+
+// Per-user expense ledger (khata) — advance IN / spent OUT with a running balance, period-aware.
+function openLedger(uid){
+  const txns=fExpenses().filter(x=>x.uid===uid).slice().sort((a,b)=>(a.date||0)-(b.date||0));
+  const name=(txns.find(x=>x.surveyor)||{}).surveyor||uid;
+  const adv=sum(txns.filter(x=>x.kind==="ADVANCE")), sp=sum(txns.filter(x=>x.kind==="EXPENSE"&&x.paymentMode!=="Company")), comp=sum(txns.filter(x=>x.kind==="EXPENSE"&&x.paymentMode==="Company"));
+  let bal=0;
+  const rows=txns.map(x=>{ const isAdv=x.kind==="ADVANCE", isComp=!isAdv&&x.paymentMode==="Company"; const inA=isAdv?(x.amount||0):0, outA=(!isAdv&&!isComp)?(x.amount||0):0; bal+=inA-outA;
+    return `<tr><td>${fmtDate(x.date)}</td><td>${isAdv?"Advance":esc(x.category||"Expense")}${isComp?' <span style="color:var(--soft);font-size:11px">(company-paid)</span>':''}${x.projectName?` · <span style="color:var(--soft);font-size:11px">${esc(x.projectName)}</span>`:''}${x.note?`<br><span style="color:var(--soft);font-size:11px">${esc(x.note)}</span>`:''}</td><td style="text-align:right;color:var(--green)">${inA?money(inA):"—"}</td><td style="text-align:right;color:var(--red)">${outA?money(outA):"—"}</td><td style="text-align:right;font-weight:700">${money(bal)}</td></tr>`; }).join("");
+  const m=$("#modal"); m.classList.remove("hidden");
+  m.innerHTML=`<div class="modalbox">
+    <h3 style="margin:0 0 2px">🧾 ${esc(name)} — Ledger</h3>
+    <div style="font-size:12px;color:var(--soft);margin-bottom:10px">${esc(RANGE.label)} · Advance <b>${money(adv)}</b> · Spent <b>${money(sp)}</b> · Balance <b style="color:${adv-sp>=0?'var(--green)':'var(--red)'}">${money(Math.abs(adv-sp))} ${adv-sp>=0?"to return":"to pay"}</b>${comp?` · Company-paid ${money(comp)}`:""}</div>
+    <div class="tablewrap"><table><tr><th>Date</th><th>Detail</th><th style="text-align:right">In</th><th style="text-align:right">Out</th><th style="text-align:right">Balance</th></tr>
+      ${rows||`<tr><td colspan="5" style="color:var(--soft);padding:14px">No transactions in this period.</td></tr>`}
+    </table></div>
+    <div style="text-align:right;margin-top:12px"><button class="btn" id="ledClose">Close</button></div>
+  </div>`;
+  m.onclick=ev=>{ if(ev.target===m) m.classList.add("hidden"); };
+  $("#ledClose").onclick=()=>m.classList.add("hidden");
 }
 
 // ── Managers (admin only) ──

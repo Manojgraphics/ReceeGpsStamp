@@ -155,12 +155,19 @@ fun StartRecceScreen(
     // returned photo lands on the right media card; photoBaseline = photo count when capture started.
     var captureTargetMedia by rememberSaveable { mutableStateOf(-1) }
     var photoBaseline by rememberSaveable { mutableStateOf(0) }
+    var replacePath by rememberSaveable { mutableStateOf("") }   // photo being re-captured via Replace; swapped on return (kept if the camera is cancelled)
     androidx.compose.runtime.LaunchedEffect(capturedPhotos.size) {
-        val t = captureTargetMedia
-        if (t in mediaList.indices && capturedPhotos.size > photoBaseline) {
+        if (capturedPhotos.size > photoBaseline) {
+            val t = captureTargetMedia
             val newOnes = capturedPhotos.drop(photoBaseline)
-            setMedia(t, mediaList[t].copy(photos = mediaList[t].photos + newOnes))
-            captureTargetMedia = -1
+            if (t in mediaList.indices) {
+                // Replace swaps out the old photo on this media card; a normal capture just appends.
+                val kept = if (replacePath.isNotBlank()) mediaList[t].photos - replacePath else mediaList[t].photos
+                setMedia(t, mediaList[t].copy(photos = kept + newOnes))
+                captureTargetMedia = -1
+            }
+            // Replace: drop the old photo from the buffer (front photos live here; also clears a media photo's buffer copy).
+            if (replacePath.isNotBlank()) { onRemovePhoto(replacePath); replacePath = "" }
         }
     }
 
@@ -571,10 +578,10 @@ fun StartRecceScreen(
                     val frontPhotos = capturedPhotos.filter { it !in mediaPhotoSet }
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         frontPhotos.forEach { path ->
-                            CapturedThumb(path, onDelete = { onRemovePhoto(path) }, onEdit = onEditPhoto)
+                            CapturedThumb(path, onReplace = { replacePath = path; captureTargetMedia = -1; photoBaseline = capturedPhotos.size; attemptCapture(shopWatermark) }, onEdit = onEditPhoto)
                         }
                         Box(Modifier.alpha(if (canCapture) 1f else 0.4f)) {
-                            PhotoThumb(filled = false) { captureTargetMedia = -1; attemptCapture(shopWatermark) }
+                            PhotoThumb(filled = false) { replacePath = ""; captureTargetMedia = -1; photoBaseline = capturedPhotos.size; attemptCapture(shopWatermark) }
                         }
                     }
 
@@ -598,13 +605,16 @@ fun StartRecceScreen(
                                     remark = entry.remark, onRemarkChange = { setMedia(i, entry.copy(remark = it)) },
                                     photos = entry.photos,
                                     onCameraClick = {
+                                        replacePath = ""
                                         captureTargetMedia = i
                                         photoBaseline = capturedPhotos.size
                                         attemptCapture(shopWatermark.copy(mediaType = entry.mediaType, creative = entry.creative, size = mediaSizeText(entry)))
                                     },
-                                    onDeletePhoto = { path ->
-                                        setMedia(i, entry.copy(photos = entry.photos - path))
-                                        onRemovePhoto(path)
+                                    onReplacePhoto = { path ->
+                                        replacePath = path
+                                        captureTargetMedia = i
+                                        photoBaseline = capturedPhotos.size
+                                        attemptCapture(shopWatermark.copy(mediaType = entry.mediaType, creative = entry.creative, size = mediaSizeText(entry)))
                                     },
                                     onEditPhoto = onEditPhoto,
                                     creatives = creatives, mediaTypes = mediaTypes,
@@ -824,7 +834,7 @@ private fun PendingShopChip(name: String, city: String, selected: Boolean, onCli
 }
 
 @Composable
-private fun CapturedThumb(path: String, onDelete: (() -> Unit)? = null, onEdit: ((String) -> Unit)? = null) {
+private fun CapturedThumb(path: String, onReplace: (() -> Unit)? = null, onEdit: ((String) -> Unit)? = null) {
     // Coil down-samples to the 64dp target (no full-res decode → no OOM). Cache key varies by
     // lastModified so the thumb reloads after an in-place annotate/edit overwrites the same file.
     val ctx = androidx.compose.ui.platform.LocalContext.current
@@ -853,14 +863,14 @@ private fun CapturedThumb(path: String, onDelete: (() -> Unit)? = null, onEdit: 
                 contentAlignment = Alignment.Center,
             ) { Icon(RgsIcons.Edit, null, tint = Color.Black, modifier = Modifier.size(11.dp)) }
         }
-        if (onDelete != null) {
-            // Tap the X to delete this photo from the recce.
+        if (onReplace != null) {
+            // Tap the camera badge to RE-CAPTURE — the new photo replaces this one (no delete).
             Box(
                 Modifier.align(Alignment.TopEnd).padding(2.dp)
                     .size(18.dp).clip(RoundedCornerShape(50)).background(Color.Black.copy(0.55f))
-                    .clickable { onDelete() },
+                    .clickable { onReplace() },
                 contentAlignment = Alignment.Center,
-            ) { Icon(RgsIcons.Close, null, tint = Color.White, modifier = Modifier.size(12.dp)) }
+            ) { Icon(RgsIcons.Camera, null, tint = Color.White, modifier = Modifier.size(11.dp)) }
         } else {
             Box(
                 Modifier.align(Alignment.TopEnd).padding(2.dp)
@@ -947,7 +957,7 @@ private fun MediaCard(
     remark: String = "", onRemarkChange: (String) -> Unit = {},
     photos: List<String> = emptyList(),
     onCameraClick: () -> Unit = {},
-    onDeletePhoto: (String) -> Unit = {},
+    onReplacePhoto: (String) -> Unit = {},
     onEditPhoto: ((String) -> Unit)? = null,
     creatives: List<String> = emptyList(),
     mediaTypes: List<String> = emptyList(),
@@ -1062,7 +1072,7 @@ private fun MediaCard(
                 Text("Add creative, media type & size first", fontSize = 11.sp, color = Color(0xFFC0605F))
             }
             FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                photos.forEach { p -> CapturedThumb(p, onDelete = { onDeletePhoto(p) }, onEdit = onEditPhoto) }
+                photos.forEach { p -> CapturedThumb(p, onReplace = { onReplacePhoto(p) }, onEdit = onEditPhoto) }
                 Box(Modifier.alpha(if (mediaReady) 1f else 0.4f)) {
                     PhotoThumb(false) {
                         if (mediaReady) onCameraClick()

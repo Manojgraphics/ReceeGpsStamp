@@ -103,6 +103,7 @@ fun ProjectSetupScreen(
     onImportShops: (String) -> Unit = {},
     onStartShop: (Shop) -> Unit = {},
     onSetShopStatus: (Shop, String) -> Unit = { _, _ -> },
+    onUpdateShop: (Shop) -> Unit = {},
     installs: List<InstallEntry> = emptyList(),
     onOpenInstallShop: (String) -> Unit = {},
     onRefreshInstalls: () -> Unit = {},
@@ -120,6 +121,7 @@ fun ProjectSetupScreen(
     var deleteCompanyConfirm by remember { mutableStateOf(false) }
     var deleteDistConfirm by remember { mutableStateOf(false) }
     var showAddShop by remember { mutableStateOf(false) }
+    var editShop by remember { mutableStateOf<Shop?>(null) }
     var showImportShops by remember { mutableStateOf(false) }
     var workMode by remember { mutableStateOf("recce") }   // "recce" | "install"
 
@@ -217,6 +219,14 @@ fun ProjectSetupScreen(
         AddItemDialog(title = "Add Media Type", label = "Media type", placeholder = "e.g. Shop Board",
             onDismiss = { showAddMediaType = false }, onSave = { onAddMediaType(it); showAddMediaType = false })
     }
+    editShop?.let { es ->
+        AddShopDialog(
+            onDismiss = { editShop = null },
+            onSave = { n, c, ct -> onUpdateShop(es.copy(name = n, city = c, contact = ct)); editShop = null },
+            title = "Edit shop", confirmLabel = "Save",
+            initialName = es.name, initialCity = es.city, initialContact = es.contact,
+        )
+    }
     if (showAddShop) {
         AddShopDialog(onDismiss = { showAddShop = false }, onSave = { n, c, ct -> onAddShop(n, c, ct); showAddShop = false })
     }
@@ -291,7 +301,7 @@ fun ProjectSetupScreen(
                     // shows the current mode's work-list. Switch mode in Setup (gear button).
                     val projInstalls = installs.filter { it.distributorId == (selectedDistributor?.id ?: "_") }
                     if (workMode == "recce") {
-                        ShopsWorkList(shops = shops, onAddShop = { showAddShop = true }, onImport = { showImportShops = true }, onStartShop = onStartShop, onSetStatus = onSetShopStatus)
+                        ShopsWorkList(shops = shops, onAddShop = { showAddShop = true }, onImport = { showImportShops = true }, onStartShop = onStartShop, onEditShop = { editShop = it }, onSetStatus = onSetShopStatus)
                     } else {
                         InstallWorkList(projInstalls, onOpenShop = onOpenInstallShop)
                     }
@@ -551,7 +561,7 @@ private fun EditableChipFlow(items: List<String>, onRemove: (String) -> Unit, on
 
 // ── Shops work-list — Pending / Done segments, search, rows, + Add shop ──
 @Composable
-private fun ShopsWorkList(shops: List<Shop>, onAddShop: () -> Unit, onImport: () -> Unit, onStartShop: (Shop) -> Unit, onSetStatus: (Shop, String) -> Unit) {
+private fun ShopsWorkList(shops: List<Shop>, onAddShop: () -> Unit, onImport: () -> Unit, onStartShop: (Shop) -> Unit, onEditShop: (Shop) -> Unit, onSetStatus: (Shop, String) -> Unit) {
     var seg by remember { mutableStateOf(0) }      // 0 = Pending, 1 = Done
     var query by remember { mutableStateOf("") }
     val pending = shops.filter { it.status == "Pending" }.sortedBy { it.name.lowercase() }
@@ -615,7 +625,7 @@ private fun ShopsWorkList(shops: List<Shop>, onAddShop: () -> Unit, onImport: ()
             )
         } else {
             list.forEachIndexed { i, s ->
-                ShopRow(s, pending = seg == 0, onStart = { onStartShop(s) }, onSetStatus = { st -> onSetStatus(s, st) })
+                ShopRow(s, pending = seg == 0, onStart = { onStartShop(s) }, onEdit = { onEditShop(s) }, onSetStatus = { st -> onSetStatus(s, st) })
                 if (i < list.size - 1) Box(Modifier.fillMaxWidth().height(0.5.dp).background(NeutralOutline.copy(alpha = 0.5f)))
             }
         }
@@ -758,7 +768,7 @@ private fun SegTab(label: String, sel: Boolean, mod: Modifier, onClick: () -> Un
 }
 
 @Composable
-private fun ShopRow(shop: Shop, pending: Boolean, onStart: () -> Unit, onSetStatus: (String) -> Unit) {
+private fun ShopRow(shop: Shop, pending: Boolean, onStart: () -> Unit, onEdit: () -> Unit, onSetStatus: (String) -> Unit) {
     Row(Modifier.fillMaxWidth().padding(vertical = 9.dp), verticalAlignment = Alignment.CenterVertically) {
         Box(Modifier.size(34.dp).clip(RoundedCornerShape(9.dp)).background(SoftChipGradient), contentAlignment = Alignment.Center) {
             Icon(RgsIcons.Store, null, tint = AppYellowDark, modifier = Modifier.size(17.dp))
@@ -770,10 +780,10 @@ private fun ShopRow(shop: Shop, pending: Boolean, onStart: () -> Unit, onSetStat
             if (sub.isNotBlank()) Text(sub, fontSize = 11.5.sp, color = NeutralTextSoft, maxLines = 1)
         }
         if (pending) {
-            // Skip — move out of pending without surveying (reversible via Revisit).
+            // Edit — fix the shop's name / city / contact.
             Text(
-                "Skip", fontSize = 12.5.sp, fontWeight = FontWeight.SemiBold, color = NeutralTextSoft,
-                modifier = Modifier.clip(RoundedCornerShape(8.dp)).clickable { onSetStatus("Skipped") }.padding(horizontal = 8.dp, vertical = 6.dp),
+                "Edit", fontSize = 12.5.sp, fontWeight = FontWeight.SemiBold, color = NeutralTextSoft,
+                modifier = Modifier.clip(RoundedCornerShape(8.dp)).clickable { onEdit() }.padding(horizontal = 8.dp, vertical = 6.dp),
             )
             Spacer(Modifier.width(4.dp))
             Box(
@@ -797,13 +807,21 @@ private fun ShopRow(shop: Shop, pending: Boolean, onStart: () -> Unit, onSetStat
 }
 
 @Composable
-private fun AddShopDialog(onDismiss: () -> Unit, onSave: (String, String, String) -> Unit) {
-    var name by remember { mutableStateOf("") }
-    var city by remember { mutableStateOf("") }
-    var contact by remember { mutableStateOf("") }
+private fun AddShopDialog(
+    onDismiss: () -> Unit,
+    onSave: (String, String, String) -> Unit,
+    title: String = "Add shop",
+    confirmLabel: String = "Add",
+    initialName: String = "",
+    initialCity: String = "",
+    initialContact: String = "",
+) {
+    var name by remember { mutableStateOf(initialName) }
+    var city by remember { mutableStateOf(initialCity) }
+    var contact by remember { mutableStateOf(initialContact) }
     androidx.compose.material3.AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Add shop", fontWeight = FontWeight.Bold) },
+        title = { Text(title, fontWeight = FontWeight.Bold) },
         text = {
             Column {
                 DialogField("Shop name", name) { name = it }
@@ -815,7 +833,7 @@ private fun AddShopDialog(onDismiss: () -> Unit, onSave: (String, String, String
         },
         confirmButton = {
             Text(
-                "Add", color = if (name.isNotBlank()) AppYellowDark else NeutralTextSoft, fontWeight = FontWeight.Bold,
+                confirmLabel, color = if (name.isNotBlank()) AppYellowDark else NeutralTextSoft, fontWeight = FontWeight.Bold,
                 modifier = Modifier.clickable(enabled = name.isNotBlank()) { onSave(name.trim(), city.trim(), contact.trim()) }.padding(8.dp),
             )
         },

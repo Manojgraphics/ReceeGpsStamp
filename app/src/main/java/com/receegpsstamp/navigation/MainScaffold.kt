@@ -487,6 +487,7 @@ fun MainScaffold(onNavigate: (String) -> Unit, appViewModel: AppViewModel = hilt
                         onImportShops = { appViewModel.importShops(it) },
                         onStartShop = { shop -> startShopId = shop.id; startedFromShopList = true; current = "tab_start" },
                         onSetShopStatus = { shop, status -> appViewModel.setShopStatus(shop, status) },
+                        onUpdateShop = { appViewModel.updateShop(it) },
                         installs = appState.installs,
                         onOpenInstallShop = { openInstallShop = it },
                         onRefreshInstalls = { appViewModel.syncNow() },

@@ -297,8 +297,11 @@ class AppViewModel @Inject constructor(
         notify("Shop added")
     }
 
-    /** Work-list quick action — mark a shop "Skipped" (out of pending) or back to "Pending" (revisit). */
+    /** Work-list quick action — send a shop back to "Pending" (revisit) or other status changes. */
     fun setShopStatus(shop: Shop, status: String) = localStore.updateShop(shop.copy(status = status))
+
+    /** Edit a shop's details (name / city / contact) from the work-list. */
+    fun updateShop(shop: Shop) = localStore.updateShop(shop)
 
     /** Bulk-import shops from pasted/CSV text — one per line, comma: Name[, City[, Contact]]. Dedupes by name. */
     fun importShops(raw: String) {

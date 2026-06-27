@@ -1426,7 +1426,7 @@ async function openCatalogManager(){
       <div class="sec">COMPANIES</div>
       <div class="filters"><input type="text" id="ncComp" placeholder="New company name" class="suInp" style="flex:1"><button class="btn y" id="ncAdd">Add company</button></div>
       ${comps.map((c,ci)=>`<div class="card" style="margin-bottom:8px">
-        <div style="display:flex;align-items:center;gap:8px"><b>${esc(c.name)}</b><button class="btn cDel" data-ci="${ci}" style="margin-left:auto;background:#FBEAE5;color:var(--danger);border:none;padding:5px 11px">Remove</button></div>
+        <div style="display:flex;align-items:center;gap:8px"><input type="text" class="coName suInp" data-ci="${ci}" value="${esc(c.name)}" title="Edit company name — tap to rename" style="flex:1;font-weight:700"><button class="btn cDel" data-ci="${ci}" style="background:#FBEAE5;color:var(--danger);border:none;padding:5px 11px">Remove</button></div>
         <div style="font-size:10.5px;color:var(--soft);font-weight:700;margin-top:8px">CREATIVES</div>
         <div class="suChips">${(c.creatives||[]).map((cr,i)=>chip(cr,"creDel",ci,i)).join("")||'<span style="color:var(--soft);font-size:12px">none yet</span>'}</div>
         <input type="text" class="creAdd suInp" data-ci="${ci}" placeholder="Type a creative + Enter" style="margin-top:6px">
@@ -1442,7 +1442,8 @@ async function openCatalogManager(){
     </div>`;
     m.onclick=ev=>{ if(ev.target===m){ m.classList.add("hidden"); renderSetup(); } };
     $("#ncAdd").onclick=async()=>{ const n=$("#ncComp").value.trim(); if(!n)return; if(!comps.find(c=>(c.name||"").toLowerCase()===n.toLowerCase())) comps.push({id:fleetRid(),name:n,creatives:[],mediaTypes:[],userId:"",createdAt:Date.now()}); await save(); render(); };
-    m.querySelectorAll(".cDel").forEach(b=>b.onclick=async()=>{ comps.splice(+b.dataset.ci,1); await save(); render(); });
+    m.querySelectorAll(".coName").forEach(inp=>inp.onchange=async()=>{ const ci=+inp.dataset.ci, nn=inp.value.trim(), old=comps[ci].name; if(!nn||nn===old){ inp.value=old; return; } if(comps.some((c,i)=>i!==ci&&(c.name||"").toLowerCase()===nn.toLowerCase())){ alert("Another company already has that name."); inp.value=old; return; } comps[ci].name=nn; dists.forEach(d=>{ if(d.companyId===comps[ci].id||(d.companyName||"").toLowerCase()===old.toLowerCase()) d.companyName=nn; }); await save(); render(); });
+    m.querySelectorAll(".cDel").forEach(b=>b.onclick=async()=>{ const ci=+b.dataset.ci, c=comps[ci]; const linked=dists.filter(d=>d.companyId===c.id||(d.companyName||"").toLowerCase()===(c.name||"").toLowerCase()).length; if(linked>0){ alert(`"${c.name}" has ${linked} distributor${linked>1?"s":""} linked — remove ${linked>1?"them":"it"} first, then delete the company.`); return; } if(!confirm(`Delete company "${c.name}"?`)) return; comps.splice(ci,1); await save(); render(); });
     m.querySelectorAll(".creDel").forEach(b=>b.onclick=async()=>{ comps[+b.dataset.ci].creatives.splice(+b.dataset.i,1); await save(); render(); });
     m.querySelectorAll(".medDel").forEach(b=>b.onclick=async()=>{ comps[+b.dataset.ci].mediaTypes.splice(+b.dataset.i,1); await save(); render(); });
     m.querySelectorAll(".creAdd").forEach(inp=>inp.onkeydown=async e=>{ if(e.key==="Enter"){ e.preventDefault(); const v=inp.value.trim(); if(v){ const c=comps[+inp.dataset.ci]; c.creatives=c.creatives||[]; if(!c.creatives.some(x=>x.toLowerCase()===v.toLowerCase()))c.creatives.push(v); await save(); render(); } } });

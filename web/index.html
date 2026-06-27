@@ -135,6 +135,10 @@
     </div>
     <div class="tb-right">
       <button class="btn" id="refresh">↻ Refresh</button>
+      <div style="position:relative">
+        <button class="btn" id="notifBtn" title="Notifications" style="position:relative;padding:6px 10px;font-size:16px;line-height:1">🔔<span id="notifBadge" style="display:none;position:absolute;top:-4px;right:-4px;min-width:18px;height:18px;border-radius:50%;background:var(--danger);color:#fff;font-size:10px;font-weight:800;display:none;align-items:center;justify-content:center;padding:0 4px;line-height:1;border:2px solid var(--card)"></span></button>
+        <div id="notifPanel" style="display:none;position:absolute;top:calc(100% + 8px);right:0;width:340px;max-height:480px;overflow:auto;background:var(--card);border:1px solid var(--line);border-radius:14px;box-shadow:0 10px 28px rgba(0,0,0,.16);z-index:200"></div>
+      </div>
       <div class="tb-av" id="avatar">··</div>
     </div>
   </div>
@@ -247,11 +251,42 @@ function renderRangeBar(){
     setRange(from,to,(f||"…")+" → "+(t||"…")); };
 }
 function rerenderActive(){ const on=document.querySelector(".nav-item.on"); if(!on) return; const t=on.dataset.tab;
-  ({overview:renderOverview,leaderboard:renderLeaderboard,team:renderTeam,projects:renderProjects,expenses:renderExpenses,analytics:renderAnalytics,map:renderMap,gallery:renderGallery,fleet:renderFleet}[t]||(()=>{}))(); }
+  ({overview:renderOverview,leaderboard:renderLeaderboard,team:renderTeam,projects:renderProjects,expenses:renderExpenses,analytics:renderAnalytics,map:renderMap,gallery:renderGallery,fleet:renderFleet}[t]||(()=>{}))();
+  if(typeof renderNotifications==="function") renderNotifications(); }
 
 $("#signin").onclick = () => signInWithPopup(auth, new GoogleAuthProvider()).catch(e=>$("#loginmsg").textContent="Sign-in failed: "+(e.message||e.code||e));
 $("#signout").onclick = () => signOut(auth);
 $("#refresh").onclick = () => load();
+// — Notifications — quick attention list synthesized from current DATA. Click a row → jumps to the right tab.
+function computeNotifications(){
+  if(!DATA) return [];
+  const out=[], r=DATA.recces||[], e=DATA.expenses||[];
+  const pendExp=e.filter(x=>x.kind==="EXPENSE"&&x.paymentMode!=="Company"&&apprState(x.uid,x.id)==="pending"&&!isHidden(x.uid));
+  if(pendExp.length) out.push({ic:"💰",t:`${pendExp.length} expense${pendExp.length===1?"":"s"} pending approval`,s:money(sum(pendExp))+" total",act:()=>{ _expTab="pending"; const t=document.querySelector('[data-tab="expenses"]'); if(t)t.click(); }});
+  const flAlerts=[]; (FLEET||[]).forEach(v=>vehAlerts(v).forEach(a=>flAlerts.push({v,a})));
+  if(flAlerts.length){ const expCnt=flAlerts.filter(o=>/EXPIRED|OVERDUE/.test(o.a)).length; out.push({ic:"🚗",t:`${flAlerts.length} fleet alert${flAlerts.length===1?"":"s"}`,s:expCnt?`${expCnt} expired/overdue · ${flAlerts.length-expCnt} due soon`:`${flAlerts.length} due soon`,act:()=>{ const t=document.querySelector('[data-tab="fleet"]'); if(t)t.click(); }}); }
+  const stale=(DATA.surveyors||[]).filter(s=>!isHidden(s.uid)&&s.lastActive&&(Date.now()-s.lastActive)>=3*86400000);
+  if(stale.length) out.push({ic:"⏰",t:`${stale.length} field user${stale.length===1?"":"s"} not synced in 3+ days`,s:stale.slice(0,2).map(s=>s.name).join(", ")+(stale.length>2?` +${stale.length-2}`:""),act:()=>{ const t=document.querySelector('[data-tab="team"]'); if(t)t.click(); }});
+  const assigned=new Set((DATA.shops||[]).map(s=>(s.project||"").toLowerCase()));
+  const orphan=(CATALOG.distributors||[]).filter(d=>d&&d.name&&!assigned.has((d.name||"").toLowerCase()));
+  if(orphan.length) out.push({ic:"🏪",t:`${orphan.length} distributor${orphan.length===1?"":"s"} not assigned yet`,s:orphan.slice(0,2).map(d=>d.name).join(", ")+(orphan.length>2?` +${orphan.length-2}`:"")+" — set up in Project Setup",act:()=>{ const t=document.querySelector('[data-tab="setup"]'); if(t)t.click(); }});
+  const flagged=r.filter(x=>!isHidden(x.uid)&&(!x.photos.length || !(x.lat&&x.lng)));
+  if(flagged.length) out.push({ic:"⚠",t:`${flagged.length} flagged recce${flagged.length===1?"":"s"}`,s:"no photo or no GPS — see Overview",act:()=>{ const t=document.querySelector('[data-tab="overview"]'); if(t)t.click(); }});
+  const wk=Date.now()-7*86400000;
+  const fresh=(DATA.surveyors||[]).filter(s=>!isHidden(s.uid)&&s.lastActive>wk&&(!s.surveyed||s.surveyed===0));
+  if(fresh.length) out.push({ic:"👤",t:`${fresh.length} new field user${fresh.length===1?"":"s"} this week`,s:"check for duplicates / role in Field Team",act:()=>{ const t=document.querySelector('[data-tab="team"]'); if(t)t.click(); }});
+  return out;
+}
+function renderNotifications(){
+  const list=computeNotifications();
+  const badge=$("#notifBadge"); if(badge){ if(list.length){ badge.style.display="flex"; badge.textContent=list.length>9?"9+":list.length; } else { badge.style.display="none"; } }
+  const p=$("#notifPanel"); if(!p) return;
+  p.innerHTML=`<div style="padding:12px 14px;border-bottom:1px solid var(--line);font-weight:800;font-size:13px;display:flex;align-items:center;gap:8px">🔔 Notifications<span style="margin-left:auto;font-size:11px;color:var(--soft);font-weight:600">${list.length} item${list.length===1?"":"s"}</span></div>`+
+    (list.length?list.map((n,i)=>`<div class="notifItem" data-i="${i}" style="display:flex;align-items:flex-start;gap:11px;padding:11px 14px;border-bottom:1px solid var(--line);cursor:pointer"><div style="width:30px;height:30px;border-radius:8px;background:var(--bg);display:flex;align-items:center;justify-content:center;font-size:16px;flex:0 0 auto">${n.ic}</div><div style="flex:1;min-width:0"><div style="font-size:12.5px;font-weight:700">${esc(n.t)}</div><div style="font-size:11px;color:var(--soft);margin-top:2px">${esc(n.s||"")}</div></div></div>`).join(""):`<div style="padding:24px 14px;text-align:center;color:var(--soft);font-size:13px">✓ All caught up — no items need attention.</div>`);
+  p.querySelectorAll(".notifItem").forEach(el=>el.onclick=()=>{ p.style.display="none"; const n=list[+el.dataset.i]; if(n&&n.act) n.act(); });
+}
+{ const nb=$("#notifBtn"); if(nb) nb.onclick=e=>{ e.stopPropagation(); const p=$("#notifPanel"); const open=p.style.display==="block"; p.style.display=open?"none":"block"; if(!open) renderNotifications(); };
+  document.addEventListener("click",e=>{ const p=$("#notifPanel"); if(p&&p.style.display==="block"&&!p.contains(e.target)&&e.target.id!=="notifBtn") p.style.display="none"; }); }
 
 onAuthStateChanged(auth, async user => {
   if(!user){ show("login"); return; }
@@ -338,7 +373,7 @@ async function load(){
     try{ const dis=await getDoc(doc(db,"config","disabled")); DISABLED=(dis.exists()&&dis.data())||{}; }catch(e){ DISABLED={}; }
     try{ const h=await getDoc(doc(db,"config","hidden")); HIDDEN_UIDS=new Set(((h.exists()&&h.data().uids)||[])); }catch(e){ HIDDEN_UIDS=new Set(); }
     $("#status").classList.add("hidden");
-    renderRangeBar(); renderOverview(); renderExpenses();
+    renderRangeBar(); renderOverview(); renderExpenses(); renderNotifications();
   }catch(e){
     $("#status").innerHTML=`<div class="card"><b>Could not load data.</b><br>${esc(e.message||e)}<br><br>
       Check: Firestore/Storage rules deployed with your email, and you're an admin or manager.</div>`;

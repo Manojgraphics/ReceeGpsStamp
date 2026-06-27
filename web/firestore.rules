@@ -6,9 +6,13 @@ service cloud.firestore {
     // ADMINS are hard-coded here (owners — cannot be removed from the UI, for safety).
     // MANAGERS are dynamic: stored in /config/access and editable by admins in the dashboard.
     function isAdmin() {
-      return request.auth != null && request.auth.token.email in [
-        'info4mediaearth@gmail.com'
-      ];
+      return request.auth != null && (
+        request.auth.token.email in [
+          'info4mediaearth@gmail.com'   // hard-coded owner (root) — never removable
+        ] ||
+        (exists(/databases/$(database)/documents/config/access) &&
+         request.auth.token.email in get(/databases/$(database)/documents/config/access).data.get('admins', []))
+      );
     }
     function managerEmails() {
       return get(/databases/$(database)/documents/config/access).data.managers;

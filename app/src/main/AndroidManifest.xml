@@ -15,7 +15,6 @@
     <application
         android:name=".RgsApp"
         android:allowBackup="true"
-        android:largeHeap="true"
         android:icon="@mipmap/ic_launcher"
         android:label="Recce GPS Stamp"
         android:roundIcon="@mipmap/ic_launcher_round"

@@ -192,7 +192,7 @@ fun AnnotateScreen(photoPath: String?, saveCleanCopy: Boolean = false, onDone: (
     var cropRect by remember { mutableStateOf<androidx.compose.ui.geometry.Rect?>(null) }
     androidx.compose.runtime.LaunchedEffect(photoPath) {
         bitmap = withContext(Dispatchers.IO) {
-            runCatching { if (photoPath != null) BitmapFactory.decodeFile(photoPath) else null }.getOrNull()
+            runCatching { if (photoPath != null) decodeSampled(photoPath) else null }.getOrNull()
         }
         loadError = bitmap == null
     }
@@ -1386,6 +1386,18 @@ private fun cornerHit(m: Mark, screen: Offset, toScreen: (Offset) -> Offset): In
     return -1
 }
 
+// Down-sampled decode — never holds a full-res bitmap in memory for the editor view or the flatten.
+// Capped at the upload size (2560): cloud uploads + PDF export already use ≤2560, so there's no real
+// quality loss, and this is what lets us drop android:largeHeap.
+private fun decodeSampled(path: String, maxEdge: Int = 2560): Bitmap? {
+    val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+    BitmapFactory.decodeFile(path, bounds)
+    if (bounds.outWidth <= 0) return null
+    var sample = 1
+    while (maxOf(bounds.outWidth, bounds.outHeight) / sample > maxEdge) sample *= 2
+    return BitmapFactory.decodeFile(path, BitmapFactory.Options().apply { inSampleSize = sample })
+}
+
 // Crash-safe JPEG write: temp → fsync → atomic rename, so a mid-write kill never leaves a
 // truncated/zero photo — the original survives until the new file is fully written.
 private fun writeJpegAtomic(path: String, bmp: Bitmap, quality: Int = 95) {
@@ -1407,7 +1419,7 @@ private suspend fun flatten(
     withContext(Dispatchers.IO) {
         path ?: return@withContext false
         try {
-            val src = BitmapFactory.decodeFile(path) ?: return@withContext false
+            val src = decodeSampled(path) ?: return@withContext false
             // Optionally keep the un-marked version in the gallery before the marks are baked in.
             if (saveCleanCopy && marks.isNotEmpty()) saveCleanCopyToGallery(context, File(path), src)
             val bmp = Bitmap.createBitmap(src.width, src.height, Bitmap.Config.ARGB_8888)

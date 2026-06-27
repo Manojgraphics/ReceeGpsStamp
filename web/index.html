@@ -1988,8 +1988,7 @@ function renderSetup(){
   $("#setup").innerHTML=`
     <div style="display:flex;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:14px">
       <div style="flex:1;min-width:150px"><div style="font-size:18px;font-weight:800">Project Setup</div><div style="font-size:12.5px;color:var(--soft)">Companies, creatives, media &amp; imports</div></div>
-      <button class="btn" id="suCat" title="Manage catalog (full editor)">✏️ Manage catalog</button>
-      <button class="btn y" id="suNewCo">+ New company</button>
+      <button class="btn y" id="suCat" title="Add / edit / remove companies + distributors (unified)">⚙️ Manage catalog</button>
     </div>
     <div class="grid" style="grid-template-columns:1fr 1fr;gap:14px;align-items:start">
       <div style="display:flex;flex-direction:column;gap:14px">
@@ -2031,7 +2030,6 @@ function renderSetup(){
     </div>`;
   $("#suCo").onchange=()=>{ _suCo=$("#suCo").value; _suDist=""; renderSetup(); };
   $("#suDist").onchange=()=>{ _suDist=$("#suDist").value; renderSetup(); };
-  $("#suNewCo").onclick=newCompanyDialog;
   $("#suCat").onclick=openCatalogManager;
   $("#suAddDist").onclick=()=>quickCatalog("dist");
   document.querySelectorAll("#setup .wmTab").forEach(b=>b.onclick=()=>{ setStage(_suDist,b.dataset.s); });
@@ -2134,46 +2132,75 @@ async function quickCatalog(kind){
     try{ await save(); alert("Added ✓ — shared with every user's app after sync."); m.classList.add("hidden"); renderSetup(); }catch(e){ alert("Could not save: "+(e.message||e)); }
   };
 }
+let _mcTab="companies", _mcExp=new Set();
 async function openCatalogManager(){
   let comps=[], dists=[];
   try{ const cc=await getDoc(doc(db,"catalog","companies")), cd=await getDoc(doc(db,"catalog","distributors")); comps=JSON.parse((cc.exists()&&cc.data().json)||"[]"); dists=JSON.parse((cd.exists()&&cd.data().json)||"[]"); }catch(e){}
   const m=$("#modal"); m.classList.remove("hidden");
   const save=async()=>{ const now=Date.now(); try{ await setDoc(doc(db,"catalog","companies"),{json:JSON.stringify(comps),updatedAt:now},{merge:true}); await setDoc(doc(db,"catalog","distributors"),{json:JSON.stringify(dists),updatedAt:now},{merge:true}); CATALOG={companies:comps,distributors:dists}; }catch(e){ alert("Save failed: "+(e.message||e)); } };
   const chip=(txt,delCls,ci,i)=>`<span class="suChip" style="cursor:default">${esc(txt)} <span class="${delCls}" data-ci="${ci}" data-i="${i}" style="cursor:pointer;color:var(--danger);font-weight:800;margin-left:3px">✕</span></span>`;
+  const distCount=c=>dists.filter(d=>d.companyId===c.id||(d.companyName||"").toLowerCase()===(c.name||"").toLowerCase()).length;
+  const shopsOf=name=>(DATA&&DATA.shops||[]).filter(s=>(s.project||"").toLowerCase()===(name||"").toLowerCase()).length;
+  const tab=(k,l,n)=>{ const on=_mcTab===k; return `<button class="mcTab" data-t="${k}" style="background:${on?'var(--brand)':'transparent'};color:${on?'var(--brand-text)':'var(--soft)'};border-radius:50px;padding:7px 16px;font-size:13px;font-weight:700;cursor:pointer;border:none">${l} <span style="opacity:.65">${n}</span></button>`; };
   const render=()=>{
-    m.innerHTML=`<div class="modalbox">
-      <h3 style="margin:0 0 4px">Manage Catalog</h3>
-      <div style="font-size:12px;color:var(--soft);margin-bottom:10px">Add companies (with creatives & media types) and distributors — shared with every user's app.</div>
-      <div class="sec">COMPANIES</div>
-      <div class="filters"><input type="text" id="ncComp" placeholder="New company name" class="suInp" style="flex:1"><button class="btn y" id="ncAdd">Add company</button></div>
-      ${comps.map((c,ci)=>`<div class="card" style="margin-bottom:8px">
-        <div style="display:flex;align-items:center;gap:8px"><input type="text" class="coName suInp" data-ci="${ci}" value="${esc(c.name)}" title="Edit company name — tap to rename" style="flex:1;font-weight:700"><button class="btn cDel" data-ci="${ci}" style="background:#FBEAE5;color:var(--danger);border:none;padding:5px 11px">Remove</button></div>
-        <div style="font-size:10.5px;color:var(--soft);font-weight:700;margin-top:8px">CREATIVES</div>
-        <div class="suChips">${(c.creatives||[]).map((cr,i)=>chip(cr,"creDel",ci,i)).join("")||'<span style="color:var(--soft);font-size:12px">none yet</span>'}</div>
-        <input type="text" class="creAdd suInp" data-ci="${ci}" placeholder="Type a creative + Enter" style="margin-top:6px">
-        <div style="font-size:10.5px;color:var(--soft);font-weight:700;margin-top:10px">MEDIA TYPES</div>
-        <div class="suChips">${(c.mediaTypes||[]).map((mt,i)=>chip(mt,"medDel",ci,i)).join("")||'<span style="color:var(--soft);font-size:12px">none yet</span>'}</div>
-        <input type="text" class="medAdd suInp" data-ci="${ci}" placeholder="Type a media type + Enter" style="margin-top:6px">
-      </div>`).join("")}
-      <div class="sec">DISTRIBUTORS</div>
-      <div class="filters"><input type="text" id="ndName" placeholder="Distributor name" class="suInp"><input type="text" id="ndComp" list="ncList" placeholder="Company" class="suInp"><input type="text" id="ndCity" placeholder="City" class="suInp"><input type="text" id="ndContact" placeholder="Contact" class="suInp"><button class="btn y" id="ndAdd">Add distributor</button></div>
-      <datalist id="ncList">${comps.map(c=>`<option value="${esc(c.name)}"></option>`).join("")}</datalist>
-      ${dists.length?`<div class="tablewrap"><table><tr><th>Distributor</th><th>Company</th><th>City</th><th></th></tr>${dists.map((d,di)=>`<tr><td><b>${esc(d.name)}</b></td><td>${esc(d.companyName||"")}</td><td>${esc(d.city||"")}</td><td><button class="btn dDel" data-di="${di}" style="background:#FBEAE5;color:var(--danger);border:none;padding:5px 11px">Remove</button></td></tr>`).join("")}</table></div>`:`<div style="color:var(--soft);font-size:13px">No distributors yet.</div>`}
-      <div style="text-align:right;margin-top:14px"><button class="btn y" id="catClose">Done</button></div>
+    const companiesPane=`
+      <div class="filters" style="gap:8px;margin-bottom:12px"><input type="text" id="ncComp" placeholder="New company name (e.g. Mahindra, Dollar)" class="suInp" style="flex:1"><button class="btn y" id="ncAdd">+ Add company</button></div>
+      ${comps.length?comps.slice().sort((a,b)=>(a.name||"").localeCompare(b.name||"")).map(c=>{ const ci=comps.indexOf(c), exp=_mcExp.has(ci);
+        return `<div class="card" style="margin-bottom:8px;padding:12px 14px">
+          <div style="display:flex;align-items:center;gap:9px"><span class="mcExp" data-ci="${ci}" style="cursor:pointer;color:var(--soft);font-weight:700;width:14px;text-align:center;user-select:none">${exp?"▾":"▸"}</span><input type="text" class="coName suInp" data-ci="${ci}" value="${esc(c.name)}" style="flex:1;font-weight:700;font-size:13.5px"><span style="font-size:11px;color:var(--soft);white-space:nowrap">${distCount(c)} dist · ${(c.creatives||[]).length} cre · ${(c.mediaTypes||[]).length} media</span><button class="btn cDel" data-ci="${ci}" style="background:#FBEAE5;color:var(--danger);border:none;padding:5px 10px;font-size:11.5px">✕</button></div>
+          ${exp?`<div style="border-top:1px dashed var(--line);margin-top:11px;padding-top:11px">
+            <div style="font-size:10.5px;color:var(--soft);font-weight:800;letter-spacing:.3px;margin-bottom:5px">CREATIVES</div>
+            <div class="suChips">${(c.creatives||[]).map((cr,i)=>chip(cr,"creDel",ci,i)).join("")||'<span style="color:var(--soft);font-size:12px">none yet</span>'}</div>
+            <input type="text" class="creAdd suInp" data-ci="${ci}" placeholder="Type a creative + Enter" style="margin-top:6px;font-size:13px">
+            <div style="font-size:10.5px;color:var(--soft);font-weight:800;letter-spacing:.3px;margin:11px 0 5px">MEDIA TYPES</div>
+            <div class="suChips">${(c.mediaTypes||[]).map((mt,i)=>chip(mt,"medDel",ci,i)).join("")||'<span style="color:var(--soft);font-size:12px">none yet</span>'}</div>
+            <input type="text" class="medAdd suInp" data-ci="${ci}" placeholder="Type a media type + Enter" style="margin-top:6px;font-size:13px">
+          </div>`:""}
+        </div>`; }).join(""):`<div class="card loading">No companies yet — add one above.</div>`}`;
+    const distributorsPane=`
+      <div class="filters" style="gap:7px;margin-bottom:12px;flex-wrap:wrap"><input type="text" id="ndName" placeholder="Distributor name" class="suInp" style="flex:1;min-width:140px"><select id="ndComp" class="suInp" style="min-width:140px"><option value="">Company…</option>${comps.map(c=>`<option value="${esc(c.name)}">${esc(c.name)}</option>`).join("")}</select><input type="text" id="ndCity" placeholder="City" class="suInp" style="width:130px"><input type="tel" id="ndContact" placeholder="Contact (10)" class="suInp" maxlength="10" style="width:130px"><button class="btn y" id="ndAdd">+ Add</button></div>
+      ${dists.length?`<div class="tablewrap"><table><tr><th>Distributor</th><th>Company</th><th>City</th><th>Contact</th><th>Shops</th><th></th></tr>${dists.slice().sort((a,b)=>(a.name||"").localeCompare(b.name||"")).map(d=>{ const di=dists.indexOf(d); return `<tr><td><input type="text" class="dName" data-di="${di}" value="${esc(d.name)}" style="width:100%;padding:5px 7px;border:1px solid var(--line);border-radius:7px;font-size:12.5px;font-weight:700"></td><td><select class="dCo" data-di="${di}" style="width:100%;padding:5px 7px;border:1px solid var(--line);border-radius:7px;font-size:12.5px"><option value="">—</option>${comps.map(c=>`<option value="${esc(c.name)}" ${c.name===d.companyName?"selected":""}>${esc(c.name)}</option>`).join("")}</select></td><td><input type="text" class="dCity" data-di="${di}" value="${esc(d.city||"")}" style="width:100%;padding:5px 7px;border:1px solid var(--line);border-radius:7px;font-size:12.5px"></td><td><input type="tel" class="dContact" data-di="${di}" value="${esc(d.contact||"")}" maxlength="10" style="width:100%;padding:5px 7px;border:1px solid var(--line);border-radius:7px;font-size:12.5px"></td><td style="text-align:center">${shopsOf(d.name)}</td><td><button class="btn dDel" data-di="${di}" style="background:#FBEAE5;color:var(--danger);border:none;padding:5px 10px;font-size:11.5px" title="Remove distributor">✕</button></td></tr>`; }).join("")}</table></div>`:`<div class="card loading">No distributors yet — add one above.</div>`}`;
+    m.innerHTML=`<div class="modalbox" style="max-width:880px">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:4px"><h3 style="margin:0;flex:1">⚙️ Manage Catalog</h3><button class="btn" id="catClose">Done</button></div>
+      <div style="font-size:12px;color:var(--soft);margin-bottom:12px">Companies (with creatives + media types) and distributors — shared with every field user's app.</div>
+      <div class="filters" style="gap:4px;background:var(--bg);border-radius:50px;padding:3px;margin-bottom:14px;display:inline-flex">${tab("companies","🏢 Companies",comps.length)}${tab("distributors","🏪 Distributors",dists.length)}</div>
+      <div>${_mcTab==="distributors"?distributorsPane:companiesPane}</div>
     </div>`;
     m.onclick=ev=>{ if(ev.target===m){ m.classList.add("hidden"); renderSetup(); } };
-    $("#ncAdd").onclick=async()=>{ const n=$("#ncComp").value.trim(); if(!n)return; if(!comps.find(c=>(c.name||"").toLowerCase()===n.toLowerCase())) comps.push({id:fleetRid(),name:n,creatives:[],mediaTypes:[],userId:"",createdAt:Date.now()}); await save(); render(); };
-    m.querySelectorAll(".coName").forEach(inp=>inp.onchange=async()=>{ const ci=+inp.dataset.ci, nn=inp.value.trim(), old=comps[ci].name; if(!nn||nn===old){ inp.value=old; return; } if(comps.some((c,i)=>i!==ci&&(c.name||"").toLowerCase()===nn.toLowerCase())){ alert("Another company already has that name."); inp.value=old; return; } comps[ci].name=nn; dists.forEach(d=>{ if(d.companyId===comps[ci].id||(d.companyName||"").toLowerCase()===old.toLowerCase()) d.companyName=nn; }); await save(); render(); });
-    m.querySelectorAll(".cDel").forEach(b=>b.onclick=async()=>{ const ci=+b.dataset.ci, c=comps[ci]; const linked=dists.filter(d=>d.companyId===c.id||(d.companyName||"").toLowerCase()===(c.name||"").toLowerCase()).length; if(linked>0){ alert(`"${c.name}" has ${linked} distributor${linked>1?"s":""} linked — remove ${linked>1?"them":"it"} first, then delete the company.`); return; } if(!confirm(`Delete company "${c.name}"?`)) return; comps.splice(ci,1); await save(); render(); });
-    m.querySelectorAll(".creDel").forEach(b=>b.onclick=async()=>{ comps[+b.dataset.ci].creatives.splice(+b.dataset.i,1); await save(); render(); });
-    m.querySelectorAll(".medDel").forEach(b=>b.onclick=async()=>{ comps[+b.dataset.ci].mediaTypes.splice(+b.dataset.i,1); await save(); render(); });
-    m.querySelectorAll(".creAdd").forEach(inp=>inp.onkeydown=async e=>{ if(e.key==="Enter"){ e.preventDefault(); const v=inp.value.trim(); if(v){ const c=comps[+inp.dataset.ci]; c.creatives=c.creatives||[]; if(!c.creatives.some(x=>x.toLowerCase()===v.toLowerCase()))c.creatives.push(v); await save(); render(); } } });
-    m.querySelectorAll(".medAdd").forEach(inp=>inp.onkeydown=async e=>{ if(e.key==="Enter"){ e.preventDefault(); const v=inp.value.trim(); if(v){ const c=comps[+inp.dataset.ci]; c.mediaTypes=c.mediaTypes||[]; if(!c.mediaTypes.some(x=>x.toLowerCase()===v.toLowerCase()))c.mediaTypes.push(v); await save(); render(); } } });
-    $("#ndAdd").onclick=async()=>{ const n=$("#ndName").value.trim(); if(!n)return; const co=$("#ndComp").value.trim(); const comp=comps.find(c=>(c.name||"").toLowerCase()===co.toLowerCase()); dists.push({id:fleetRid(),name:n,city:$("#ndCity").value.trim(),contact:$("#ndContact").value.trim(),companyId:comp?comp.id:"",companyName:comp?comp.name:co,userId:"",createdAt:Date.now()}); await save(); render(); };
-    m.querySelectorAll(".dDel").forEach(b=>b.onclick=async()=>{ dists.splice(+b.dataset.di,1); await save(); render(); });
     $("#catClose").onclick=()=>{ m.classList.add("hidden"); renderSetup(); };
+    m.querySelectorAll(".mcTab").forEach(b=>b.onclick=()=>{ _mcTab=b.dataset.t; render(); });
+    if(_mcTab==="companies"){
+      m.querySelectorAll(".mcExp").forEach(s=>s.onclick=()=>{ const ci=+s.dataset.ci; if(_mcExp.has(ci))_mcExp.delete(ci); else _mcExp.add(ci); render(); });
+      $("#ncAdd").onclick=async()=>{ const n=$("#ncComp").value.trim(); if(!n){ alert("Enter a name"); return; } if(comps.some(c=>(c.name||"").toLowerCase()===n.toLowerCase())){ alert("Already exists"); return; } comps.push({id:fleetRid(),name:n,creatives:[],mediaTypes:[],userId:"",createdAt:Date.now()}); logAudit("setup",`Added company ${n}`); await save(); render(); };
+      m.querySelectorAll(".coName").forEach(inp=>inp.onchange=async()=>{ const ci=+inp.dataset.ci, nn=inp.value.trim(), old=comps[ci].name; if(!nn||nn===old){ inp.value=old; return; } if(comps.some((c,i)=>i!==ci&&(c.name||"").toLowerCase()===nn.toLowerCase())){ alert("Another company already has that name."); inp.value=old; return; } comps[ci].name=nn; dists.forEach(d=>{ if(d.companyId===comps[ci].id||(d.companyName||"").toLowerCase()===old.toLowerCase()){ d.companyName=nn; d.companyId=comps[ci].id; } }); logAudit("setup",`Renamed company "${old}" → "${nn}"`); await save(); render(); });
+      m.querySelectorAll(".cDel").forEach(b=>b.onclick=async()=>{ const ci=+b.dataset.ci, c=comps[ci]; const linked=distCount(c); if(linked>0){ alert(`"${c.name}" has ${linked} distributor${linked>1?"s":""} linked — remove ${linked>1?"them":"it"} first, then delete the company.`); return; } if(!confirm(`Delete company "${c.name}"?`)) return; comps.splice(ci,1); _mcExp.delete(ci); logAudit("setup",`Deleted company ${c.name}`); await save(); render(); });
+      m.querySelectorAll(".creDel").forEach(b=>b.onclick=async()=>{ comps[+b.dataset.ci].creatives.splice(+b.dataset.i,1); await save(); render(); });
+      m.querySelectorAll(".medDel").forEach(b=>b.onclick=async()=>{ comps[+b.dataset.ci].mediaTypes.splice(+b.dataset.i,1); await save(); render(); });
+      m.querySelectorAll(".creAdd").forEach(inp=>inp.onkeydown=async e=>{ if(e.key==="Enter"){ e.preventDefault(); const v=inp.value.trim(); if(v){ const c=comps[+inp.dataset.ci]; c.creatives=c.creatives||[]; if(!c.creatives.some(x=>x.toLowerCase()===v.toLowerCase()))c.creatives.push(v); await save(); render(); } } });
+      m.querySelectorAll(".medAdd").forEach(inp=>inp.onkeydown=async e=>{ if(e.key==="Enter"){ e.preventDefault(); const v=inp.value.trim(); if(v){ const c=comps[+inp.dataset.ci]; c.mediaTypes=c.mediaTypes||[]; if(!c.mediaTypes.some(x=>x.toLowerCase()===v.toLowerCase()))c.mediaTypes.push(v); await save(); render(); } } });
+    }
+    if(_mcTab==="distributors"){
+      $("#ndAdd").onclick=async()=>{ const n=$("#ndName").value.trim(); if(!n){ alert("Enter distributor name"); return; } const co=$("#ndComp").value.trim(); const comp=comps.find(c=>(c.name||"").toLowerCase()===co.toLowerCase()); dists.push({id:fleetRid(),name:n,city:$("#ndCity").value.trim(),contact:($("#ndContact").value||"").replace(/\D/g,"").slice(0,10),companyId:comp?comp.id:"",companyName:comp?comp.name:co,userId:"",createdAt:Date.now()}); logAudit("setup",`Added distributor ${n}${co?" → "+co:""}`); await save(); render(); };
+      m.querySelectorAll(".dName").forEach(inp=>inp.onchange=async()=>{ const di=+inp.dataset.di, nn=inp.value.trim(), old=dists[di].name; if(!nn||nn===old){ inp.value=old; return; } if(dists.some((d,i)=>i!==di&&(d.name||"").toLowerCase()===nn.toLowerCase())){ alert(`Another distributor already named "${nn}"`); inp.value=old; return; } if(!confirm(`Rename "${old}" → "${nn}"?\nCascades to every field user's local copy.`)){ inp.value=old; return; } dists[di].name=nn; await save(); await cascadeDistRename(old,nn); render(); });
+      m.querySelectorAll(".dCo").forEach(sel=>sel.onchange=async()=>{ const di=+sel.dataset.di, co=sel.value; const comp=comps.find(c=>c.name===co); dists[di].companyName=comp?comp.name:""; dists[di].companyId=comp?comp.id:""; await save(); render(); });
+      m.querySelectorAll(".dCity").forEach(inp=>inp.onchange=async()=>{ dists[+inp.dataset.di].city=inp.value.trim(); await save(); });
+      m.querySelectorAll(".dContact").forEach(inp=>inp.onchange=async()=>{ dists[+inp.dataset.di].contact=inp.value.replace(/\D/g,"").slice(0,10); await save(); inp.value=dists[+inp.dataset.di].contact; });
+      m.querySelectorAll(".dDel").forEach(b=>b.onclick=async()=>{ const di=+b.dataset.di, d=dists[di]; const sc=shopsOf(d.name); if(!confirm(`Delete distributor "${d.name}"?${sc?` (${sc} shop${sc>1?"s":""} already linked stay in field users' app.)`:""}`)) return; dists.splice(di,1); logAudit("setup",`Deleted distributor ${d.name}`); await save(); render(); });
+    }
   };
   render();
+}
+// Cascade a distributor rename to every field user's local data (used by Manage Catalog inline rename).
+async function cascadeDistRename(oldName,newName){
+  if(!oldName||!newName||oldName===newName) return;
+  let touched=0;
+  for(const s of ((DATA&&DATA.surveyors)||[])){
+    let changed=false;
+    try{ const dRef=doc(db,"users",s.uid,"backup","distributors"); const ds=await getDoc(dRef); if(ds.exists()){ let arr=[]; try{arr=JSON.parse(ds.get("json")||"[]");}catch(e){} let t=false; arr.forEach(x=>{ if(x&&(x.name||"").toLowerCase()===oldName.toLowerCase()){ x.name=newName; t=true; } }); if(t){ await setDoc(dRef,{json:JSON.stringify(arr),updatedAt:Date.now()},{merge:true}); changed=true; } } }catch(e){}
+    try{ const aRef=doc(db,"assignments",s.uid); const as=await getDoc(aRef); if(as.exists()){ const d=as.data()||{}; let t=false; (d.projects||[]).forEach(p=>{ if((p.name||"").toLowerCase()===oldName.toLowerCase()){ p.name=newName; t=true; } }); (d.shops||[]).forEach(sh=>{ if((sh.project||"").toLowerCase()===oldName.toLowerCase()){ sh.project=newName; t=true; } }); if(t){ await setDoc(aRef,{projects:d.projects||[],shops:d.shops||[],updatedAt:Date.now()},{merge:true}); changed=true; } } }catch(e){}
+    if(changed) touched++;
+  }
+  logAudit("setup",`Renamed distributor "${oldName}" → "${newName}" (cascade to ${touched} field user${touched===1?"":"s"})`);
 }
 // Upserts a company (+creatives/media) and distributor into the shared `catalog` so every app pulls them.
 async function upsertCatalog(company, creatives, mediaTypes, projName, city, contact){

@@ -235,9 +235,10 @@ class LocalStore @Inject constructor(
         }
     }
 
-    /** Records a persist failure to Logcat + a shareable diagnostics file (no Crashlytics on this app). */
+    /** Records a persist failure to Logcat + Crashlytics (non-fatal) + a shareable diagnostics file. */
     private fun recordPersistFailure(t: Throwable) {
         android.util.Log.e("LocalStore", "Failed to persist local data", t)
+        runCatching { com.google.firebase.crashlytics.FirebaseCrashlytics.getInstance().recordException(t) }
         runCatching {
             val dir = File(context.getExternalFilesDir(null), "crash").apply { mkdirs() }
             File(dir, "persist_error.txt").writeText(

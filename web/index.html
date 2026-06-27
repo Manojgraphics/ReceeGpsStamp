@@ -14,16 +14,16 @@
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.17.0/dist/tabler-icons.min.css"/>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700;900&display=swap" rel="stylesheet">
 <style>
   :root{
-    --brand:#F2B705; --brand-d:#B8890C; --brand-text:#0F1923; --sidebar:#0F1923;
-    --yellow:#F2B705; --amber:#B8890C; --ink:#15212B; --soft:#4A5A66;
-    --bg:#F0F1F4; --card:#FFFFFF; --line:#E2E7EB; --green:#B8890C; --red:#C8472E; --danger:#C8472E; --dark:#0F1923;
+    --brand:#FFC400; --brand-d:#B8890C; --brand-text:#1B1B1B; --sidebar:#1C1C1C;
+    --yellow:#FFC400; --amber:#B8890C; --ink:#1B1B1B; --soft:#5C615F;
+    --bg:#F2F3F4; --card:#FFFFFF; --line:#E4E6E8; --green:#B8890C; --red:#B3261E; --danger:#B3261E; --dark:#1C1C1C;
     --shadow:0 1px 2px rgba(15,25,35,.05); --shadow-lg:0 18px 50px rgba(15,25,35,.22); --r:14px;
   }
   *{box-sizing:border-box}
-  body{margin:0;font-family:'Inter',-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif;background:var(--bg);color:var(--ink);-webkit-font-smoothing:antialiased}
+  body{margin:0;font-family:'Roboto',-apple-system,BlinkMacSystemFont,"Segoe UI",Arial,sans-serif;background:var(--bg);color:var(--ink);-webkit-font-smoothing:antialiased}
   .hidden{display:none!important}
   /* Login */
   #login{min-height:100vh;display:flex;align-items:center;justify-content:center;background:radial-gradient(1200px 650px at 50% -15%,#16222e,#0a0f15);color:#fff;padding:20px}
@@ -55,7 +55,7 @@
   .btn{background:var(--card);color:var(--ink);border:1px solid var(--line);border-radius:9px;padding:9px 14px;font-size:13px;font-weight:700;cursor:pointer;transition:all .15s}
   .btn:hover{border-color:#cdd4d9;background:#fafbfb}
   .btn.y,.btn.p{background:var(--brand);color:var(--brand-text);border:none}
-  .btn.y:hover,.btn.p:hover{background:#e6ad05}
+  .btn.y:hover,.btn.p:hover{background:#E0A800}
   .btn.s{background:var(--card);color:var(--ink);border:1px solid var(--line)}
   /* Cards / KPI / sections */
   .grid{display:grid;gap:12px;grid-template-columns:repeat(auto-fit,minmax(160px,1fr))}
@@ -145,9 +145,12 @@
       <div class="nav-item" data-tab="leaderboard"><span class="nav-ic"><i class="ti ti-trophy"></i></span>Leaderboard</div>
       <div class="nav-item" data-tab="team"><span class="nav-ic"><i class="ti ti-users-group"></i></span>Field Team</div>
       <div class="nav-item" data-tab="projects"><span class="nav-ic"><i class="ti ti-building-store"></i></span>Projects</div>
+      <div class="nav-item" data-tab="setup"><span class="nav-ic"><i class="ti ti-settings"></i></span>Project Setup</div>
       <div class="nav-section">Insights</div>
       <div class="nav-item" data-tab="expenses"><span class="nav-ic"><i class="ti ti-wallet"></i></span>Expenses</div>
       <div class="nav-item" data-tab="gallery"><span class="nav-ic"><i class="ti ti-photo"></i></span>Gallery</div>
+      <div class="nav-item" data-tab="analytics"><span class="nav-ic"><i class="ti ti-chart-line"></i></span>Analytics</div>
+      <div class="nav-item" data-tab="map"><span class="nav-ic"><i class="ti ti-map-2"></i></span>Map</div>
       <div class="nav-item" data-tab="fleet"><span class="nav-ic"><i class="ti ti-truck"></i></span>Fleet</div>
       <div class="nav-section hidden" id="admSec">Admin</div>
       <div class="nav-item hidden" data-tab="access"><span class="nav-ic"><i class="ti ti-users"></i></span>Managers</div>

@@ -564,20 +564,48 @@ function renderProjects(){
   shops.forEach(s=>{ const g=get(s.project||"General"); g.shops++; if(s.company)g.company=s.company; if(s.surveyor)g.surveyors.add(s.surveyor); });
   recces.forEach(r=>{ const g=get(r.project||"General"); g.surveyed++; if(r.status==="Interested")g.interested++; if(r.surveyor)g.surveyors.add(r.surveyor); });
   exps.filter(x=>x.kind==="EXPENSE"&&x.paymentMode!=="Company").forEach(x=>{ get(x.projectName||"General").spend+=x.amount||0; });
-  const list=Object.values(P).filter(g=>g.project!=="General").sort((a,b)=>b.surveyed-a.surveyed||b.spend-a.spend);
+  // shop-level install rollup per project (install / partial / pending sum to shops)
+  const sm={}; installUnits(recces).forEach(o=>{ const p=o.r.project||"General", sid=o.r.id; (sm[p]=sm[p]||{}); const sh=sm[p][sid]=sm[p][sid]||{u:0,inst:0,prog:0}; sh.u++; if(o.fi&&o.fi.status==="Installed")sh.inst++; else if(o.fi&&o.fi.status==="InProgress")sh.prog++; });
+  const roll=p=>{ const m=sm[p]||{}; let inS=0,paS=0; Object.values(m).forEach(sh=>{ if(sh.inst>0&&sh.inst===sh.u)inS++; else if(sh.inst>0||sh.prog>0)paS++; }); return {inS,paS}; };
+  const distCity=name=>{ const d=(CATALOG.distributors||[]).find(x=>(x.name||"").toLowerCase()===(name||"").toLowerCase()); return (d&&d.city)||""; };
+  const statusPill=p=> p>=70?["On track","#1B873F","#E8F5EC"] : p>=40?["In progress","#B8890C","#FFF6DC"] : p>=10?["Slow","#C8472E","#FBEAE5"] : ["Just started","#5C615F","#EEF0F2"];
+  const list=Object.values(P).filter(g=>g.project!=="General").map(g=>{ const {inS,paS}=roll(g.project); const prog=g.shops?Math.round(inS*100/g.shops):0; return {...g,city:distCity(g.project),install:inS,partial:paS,pending:Math.max(0,g.shops-inS-paS),prog,status:statusPill(prog)}; }).sort((a,b)=>b.shops-a.shops);
+  const coCount={}; list.forEach(g=>{ if(g.company)coCount[g.company]=(coCount[g.company]||0)+1; });
+  const stCount={}; list.forEach(g=>{ stCount[g.status[0]]=(stCount[g.status[0]]||0)+1; });
+  const initials=n=>(n.split(/\s+/).filter(Boolean).slice(0,2).map(w=>w[0]).join("").toUpperCase())||"–";
+  const donut=pct=>{ const C=2*Math.PI*15.5; return `<svg width="46" height="46" viewBox="0 0 40 40" style="flex:0 0 auto"><circle cx="20" cy="20" r="15.5" fill="none" stroke="var(--line)" stroke-width="5"/><circle cx="20" cy="20" r="15.5" fill="none" stroke="var(--brand)" stroke-width="5" stroke-linecap="round" stroke-dasharray="${C}" stroke-dashoffset="${C*(1-pct/100)}" transform="rotate(-90 20 20)"/><text x="20" y="20" text-anchor="middle" dominant-baseline="central" font-size="11" font-weight="800" fill="var(--ink)">${pct}%</text></svg>`; };
+  const stcell=(n,l,col)=>`<div style="text-align:center"><div style="font-size:20px;font-weight:800;color:${col||'var(--ink)'}">${n}</div><div style="font-size:9.5px;letter-spacing:.4px;color:var(--soft)">${l}</div></div>`;
+  const chip=(lbl,n,key)=>`<button class="prChip" data-f="${esc(key)}" style="border:1px solid var(--line);background:var(--card);color:var(--ink);border-radius:50px;padding:6px 13px;font-size:12.5px;font-weight:700;cursor:pointer;white-space:nowrap">${esc(lbl)} <span style="opacity:.6;font-size:11px;margin-left:2px">${n}</span></button>`;
   $("#projects").innerHTML=`
-    ${projSubnav('recce')}
-    <div class="sec">🏢 PROJECTS ${RANGE.label!=="All time"?"· "+esc(RANGE.label):""} · tap a project for full detail</div>
-    ${list.length?`<div class="tablewrap"><table>
-      <tr><th>Project</th><th>Company</th><th>Shops</th><th>Surveyed</th><th>Coverage</th><th>Interested</th><th>Spend</th><th>Team</th></tr>
-      ${list.map(g=>{ const cov=g.shops?Math.round(g.surveyed*100/g.shops):0;
-        return `<tr><td class="wrap"><b class="prLink" data-p="${esc(g.project)}" style="color:var(--amber);cursor:pointer">${esc(g.project)}</b>${stageBadge(g.project)}</td>
-        <td>${esc(g.company||"—")}</td><td>${g.shops}</td><td>${g.surveyed}</td>
-        <td style="min-width:96px"><div class="bar"><i style="width:${cov}%"></i></div><span style="font-size:10.5px;color:var(--soft)">${cov}%</span></td>
-        <td>${g.interested}</td><td>${money(g.spend)}</td><td>${g.surveyors.size}</td></tr>`; }).join("")}
-    </table></div>`:`<div class="card loading">No project data in this period.</div>`}`;
-  document.querySelectorAll(".prLink").forEach(b=>b.onclick=()=>{ _projView="detail"; _projSel=b.dataset.p; renderProjects(); window.scrollTo(0,0); });
-  wirePT();
+    <div style="display:flex;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:14px">
+      <div style="flex:1;min-width:180px;font-size:18px;font-weight:800">Projects · Distributors</div>
+      <button class="btn" id="prImport">↓ Import Excel</button>
+      <button class="btn y" id="prAdd">+ Add distributor</button>
+    </div>
+    <div class="filters" id="prChips" style="gap:8px;margin-bottom:14px">
+      ${chip("All",list.length,"all")}${Object.entries(coCount).map(([c,n])=>chip(c,n,"co:"+c)).join("")}${Object.entries(stCount).map(([s,n])=>chip(s,n,"st:"+s)).join("")}
+    </div>
+    <div class="grid" id="prGrid" style="grid-template-columns:repeat(auto-fit,minmax(330px,1fr))">
+      ${list.map(g=>`<div class="card prCard" data-p="${esc(g.project)}" data-co="${esc(g.company||'')}" data-st="${esc(g.status[0])}" style="cursor:pointer;padding:16px">
+        <div style="display:flex;align-items:center;gap:11px">
+          <div style="width:42px;height:42px;border-radius:11px;background:var(--dark);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:14px;flex:0 0 auto">${esc(initials(g.project))}</div>
+          <div style="flex:1;min-width:0"><div style="font-weight:800;font-size:15px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(g.project)}</div><div style="font-size:11.5px;color:var(--soft);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc([g.city,g.company].filter(Boolean).join(" · "))||"—"}</div></div>
+          ${donut(g.prog)}
+        </div>
+        <div style="margin-top:10px"><span class="pill" style="background:${g.status[2]};color:${g.status[1]}">${g.status[0]}</span></div>
+        <div style="border-top:1px solid var(--line);margin-top:12px;padding-top:12px;display:grid;grid-template-columns:repeat(4,1fr)">
+          ${stcell(g.shops,"SHOPS")}${stcell(g.install,"INSTALL","var(--brand-d)")}${stcell(g.partial,"PARTIAL")}${stcell(g.pending,"PENDING")}
+        </div>
+      </div>`).join("")}
+      <div class="card prAddCard" style="cursor:pointer;display:flex;align-items:center;justify-content:center;min-height:160px;border:1.5px dashed var(--line);color:var(--soft);font-weight:700;font-size:14px">+ Add new distributor</div>
+    </div>`;
+  const goSetup=()=>{ const t=document.querySelector('[data-tab="setup"]'); if(t)t.click(); };
+  $("#prImport").onclick=goSetup; $("#prAdd").onclick=goSetup;
+  document.querySelectorAll("#projects .prAddCard").forEach(c=>c.onclick=goSetup);
+  document.querySelectorAll("#projects .prCard").forEach(c=>c.onclick=()=>{ _projView="detail"; _projSel=c.dataset.p; renderProjects(); window.scrollTo(0,0); });
+  const chips=document.querySelectorAll("#prChips .prChip");
+  chips.forEach(b=>b.onclick=()=>{ chips.forEach(x=>{ x.style.background="var(--card)"; x.style.color="var(--ink)"; }); b.style.background="var(--brand)"; b.style.color="var(--brand-text)"; const f=b.dataset.f; document.querySelectorAll("#prGrid .prCard").forEach(c=>{ const show=f==="all"||(f.startsWith("co:")&&c.dataset.co===f.slice(3))||(f.startsWith("st:")&&c.dataset.st===f.slice(3)); c.style.display=show?"":"none"; }); });
+  if(chips[0]) chips[0].click();
 }
 function renderProjectDetail(name){
   const all=fRecces().filter(r=>(r.project||"General")===name);

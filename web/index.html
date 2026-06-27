@@ -952,7 +952,7 @@ function renderFleet(){
 }
 // ── Vehicles — full fleet management on the shared `fleet` collection (app + web, one source) ──
 const FLEET_TYPES=["Bike","Car","Transport vehicle","Other"];
-const FLEET_DEFAULT_MAINT=[["Oil change",3000],["Service",5000],["Wheel alignment",5000],["Brake",10000],["Clutch",20000],["Coolant",20000],["Battery",15000],["Tyre",30000]];
+const FLEET_DEFAULT_MAINT=[["Oil change",3000],["Oil Filter",5000],["Air filter",10000],["Fuel Filter",20000],["Service",5000],["Wheel alignment",5000],["Brake",10000],["Clutch",20000],["Coolant",20000],["Battery",15000],["Tyre",30000]];
 const fleetRid=()=>Math.random().toString(36).slice(2,10);
 function vehEconomy(v){ const s=(v.fuelLogs||[]).filter(f=>f.odometer>0&&f.litres>0).sort((a,b)=>a.odometer-b.odometer); if(s.length<2)return 0; const dist=s[s.length-1].odometer-s[0].odometer, lit=s.reduce((a,b)=>a+(b.litres||0),0)-s[0].litres; return (lit>0&&dist>0)?dist/lit:0; }
 const typeNeedsFitness=t=>t!=="Bike"&&t!=="Car"; // fitness certificate = commercial vehicles only (not Bike/Car)
@@ -1010,7 +1010,10 @@ function openVehicle(v){
 // Full-page Add/Edit vehicle form (styled like Project Setup) — replaces the Fleet tab, not a modal.
 function vehicleForm(existing){
   const base=existing||{};
-  const items=(base.maintItems&&base.maintItems.length?base.maintItems:FLEET_DEFAULT_MAINT.map(([n,k])=>({name:n,intervalKm:k,lastKm:0})));
+  const _dfltMI=FLEET_DEFAULT_MAINT.map(([n,k])=>({name:n,intervalKm:k,lastKm:0}));
+  const _haveMI=new Set((base.maintItems||[]).map(mi=>(mi.name||"").toLowerCase()));
+  // Merge: keep the vehicle's own items, append any default items it's missing (so existing vehicles gain new ones like the filters).
+  const items=((base.maintItems&&base.maintItems.length)?base.maintItems.slice():[]).concat(_dfltMI.filter(d=>!_haveMI.has(d.name.toLowerCase())));
   const dval=e=>e>0?new Date(e).toISOString().slice(0,10):"";
   try{ $("#modal").classList.add("hidden"); }catch(e){}
   $("#fleet").innerHTML=`

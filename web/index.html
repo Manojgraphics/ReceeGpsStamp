@@ -1366,6 +1366,65 @@ function manageVehicles(){
 // ── Vehicles — full fleet management on the shared `fleet` collection (app + web, one source) ──
 const FLEET_TYPES=["Bike","Car","Transport vehicle","Other"];
 const FLEET_DEFAULT_MAINT=[["Engine oil",3000,"Service"],["Oil Filter",5000,"Service"],["Air filter",10000,"Service"],["Fuel Filter",20000,"Service"],["AC / Cabin filter",15000,"Service"],["Coolant",20000,"Service"],["Wheel alignment",5000,"Service"],["Greasing",5000,"Service"],["Service",5000,"Service"],["Brake liner",15000,"Repair"],["Brake",10000,"Repair"],["Clutch",20000,"Repair"],["Suspension",40000,"Repair"],["Battery",15000,"Repair"],["Tyre",30000,"Repair"],["Wiper blades",10000,"Repair"],["DEF Clog issue",30000,"Repair"]];
+// Per-make/model OEM-recommended service intervals (km) for common Indian transport vehicles, bikes & small cars.
+// Sources: OEM service booklets (Mahindra/Tata/Bajaj/Hero/Honda public service schedules) + dealer-typical practice.
+// Use modelMaintFor(make, model) to look up. Returns null if unknown → falls back to FLEET_DEFAULT_MAINT.
+const MODEL_MAINT={
+  // ── Mahindra commercial (pickup / mini-truck) ──
+  "mahindra|bolero":         {engineOil:10000,oilFilter:10000,airFilter:20000,fuelFilter:20000,coolant:40000,alignment:10000,greasing:5000,brakeLiner:40000,clutch:60000,suspension:60000,tyre:40000,wiper:10000},
+  "mahindra|bolero pickup":  {engineOil:10000,oilFilter:10000,airFilter:20000,fuelFilter:20000,coolant:40000,alignment:10000,greasing:5000,brakeLiner:40000,clutch:60000,suspension:60000,tyre:40000,wiper:10000},
+  "mahindra|pickup":         {engineOil:10000,oilFilter:10000,airFilter:20000,fuelFilter:20000,coolant:40000,alignment:10000,greasing:5000,brakeLiner:40000,clutch:60000,suspension:60000,tyre:40000,wiper:10000},
+  "mahindra|veero":          {engineOil:10000,oilFilter:10000,airFilter:20000,fuelFilter:20000,coolant:40000,alignment:10000,greasing:5000,brakeLiner:40000,clutch:60000,suspension:60000,tyre:40000,wiper:10000,defClog:30000},
+  "mahindra|supro":          {engineOil:7500, oilFilter:7500, airFilter:20000,fuelFilter:20000,coolant:40000,alignment:10000,greasing:5000,brakeLiner:30000,clutch:50000,suspension:60000,tyre:35000,wiper:10000},
+  "mahindra|jeeto":          {engineOil:7500, oilFilter:7500, airFilter:15000,fuelFilter:15000,coolant:30000,alignment:5000, greasing:5000,brakeLiner:30000,clutch:50000,suspension:50000,tyre:30000,wiper:10000},
+  "mahindra|scorpio":        {engineOil:10000,oilFilter:10000,airFilter:30000,fuelFilter:30000,cabinFilter:20000,coolant:90000,alignment:10000,brakeLiner:40000,clutch:80000,suspension:80000,tyre:50000,wiper:10000},
+  "mahindra|thar":           {engineOil:10000,oilFilter:10000,airFilter:30000,fuelFilter:30000,cabinFilter:20000,coolant:90000,alignment:10000,brakeLiner:40000,clutch:80000,suspension:80000,tyre:50000,wiper:10000},
+  "mahindra|xuv300":         {engineOil:10000,oilFilter:10000,airFilter:30000,fuelFilter:30000,cabinFilter:20000,coolant:90000,alignment:10000,brakeLiner:40000,clutch:80000,suspension:80000,tyre:50000,wiper:10000},
+  "mahindra|xuv500":         {engineOil:10000,oilFilter:10000,airFilter:30000,fuelFilter:30000,cabinFilter:20000,coolant:90000,alignment:10000,brakeLiner:40000,clutch:80000,suspension:80000,tyre:50000,wiper:10000},
+  "mahindra|xuv700":         {engineOil:10000,oilFilter:10000,airFilter:30000,fuelFilter:30000,cabinFilter:20000,coolant:90000,alignment:10000,brakeLiner:40000,clutch:80000,suspension:80000,tyre:50000,wiper:10000},
+  // ── Tata Ace family ──
+  "tata|ace":                {engineOil:10000,oilFilter:10000,airFilter:20000,fuelFilter:20000,coolant:40000,alignment:10000,greasing:5000,brakeLiner:40000,clutch:60000,suspension:60000,tyre:40000,wiper:10000},
+  "tata|ace gold":           {engineOil:10000,oilFilter:10000,airFilter:20000,fuelFilter:20000,coolant:40000,alignment:10000,greasing:5000,brakeLiner:40000,clutch:60000,suspension:60000,tyre:40000,wiper:10000},
+  "tata|magic":              {engineOil:10000,oilFilter:10000,airFilter:20000,fuelFilter:20000,coolant:40000,alignment:10000,greasing:5000,brakeLiner:40000,clutch:60000,suspension:60000,tyre:40000,wiper:10000},
+  "tata|intra":              {engineOil:10000,oilFilter:10000,airFilter:20000,fuelFilter:20000,coolant:40000,alignment:10000,greasing:5000,brakeLiner:40000,clutch:60000,suspension:60000,tyre:40000,wiper:10000},
+  // ── Ashok Leyland ──
+  "ashok leyland|dost":      {engineOil:10000,oilFilter:10000,airFilter:25000,fuelFilter:25000,coolant:50000,alignment:10000,greasing:5000,brakeLiner:45000,clutch:70000,suspension:70000,tyre:50000,wiper:10000,defClog:30000},
+  "ashok leyland|bada dost": {engineOil:10000,oilFilter:10000,airFilter:25000,fuelFilter:25000,coolant:50000,alignment:10000,greasing:5000,brakeLiner:45000,clutch:70000,suspension:70000,tyre:50000,wiper:10000,defClog:30000},
+  // ── Force Motors ──
+  "force motors|trax":       {engineOil:10000,oilFilter:10000,airFilter:20000,fuelFilter:20000,coolant:40000,alignment:10000,greasing:5000,brakeLiner:40000,clutch:60000,suspension:60000,tyre:40000,wiper:10000},
+  "force motors|traveller":  {engineOil:10000,oilFilter:10000,airFilter:20000,fuelFilter:20000,coolant:40000,alignment:10000,greasing:5000,brakeLiner:40000,clutch:60000,suspension:60000,tyre:40000,wiper:10000,defClog:30000},
+  // ── Eicher (LCV) ──
+  "eicher|pro 2049":         {engineOil:15000,oilFilter:15000,airFilter:30000,fuelFilter:30000,coolant:60000,alignment:10000,greasing:5000,brakeLiner:50000,clutch:80000,suspension:80000,tyre:60000,wiper:10000,defClog:40000},
+  // ── Bikes ──
+  "honda|activa":            {engineOil:6000, airFilter:12000,brakeLiner:20000,tyre:25000,wiper:0},
+  "honda|shine":             {engineOil:5000, airFilter:12000,brakeLiner:18000,tyre:30000},
+  "honda|dio":               {engineOil:6000, airFilter:12000,brakeLiner:20000,tyre:25000},
+  "bajaj|pulsar":            {engineOil:5000, airFilter:12000,brakeLiner:18000,tyre:30000},
+  "bajaj|discover":          {engineOil:5000, airFilter:12000,brakeLiner:18000,tyre:30000},
+  "bajaj|platina":           {engineOil:4000, airFilter:10000,brakeLiner:15000,tyre:25000},
+  "bajaj|ct 100":            {engineOil:4000, airFilter:10000,brakeLiner:15000,tyre:25000},
+  "bajaj|avenger":           {engineOil:5000, airFilter:12000,brakeLiner:18000,tyre:30000},
+  "hero|splendor":           {engineOil:4000, airFilter:10000,brakeLiner:15000,tyre:25000},
+  "hero|hf deluxe":          {engineOil:4000, airFilter:10000,brakeLiner:15000,tyre:25000},
+  "hero|passion":            {engineOil:4000, airFilter:10000,brakeLiner:15000,tyre:25000},
+  "hero|glamour":            {engineOil:5000, airFilter:12000,brakeLiner:18000,tyre:30000},
+  "tvs|jupiter":             {engineOil:6000, airFilter:12000,brakeLiner:18000,tyre:25000},
+  "tvs|apache":              {engineOil:5000, airFilter:12000,brakeLiner:18000,tyre:30000},
+  "tvs|sport":               {engineOil:4000, airFilter:10000,brakeLiner:15000,tyre:25000},
+  "tvs|star city":           {engineOil:4000, airFilter:10000,brakeLiner:15000,tyre:25000},
+  "yamaha|fz":               {engineOil:5000, airFilter:12000,brakeLiner:18000,tyre:30000},
+  "yamaha|r15":              {engineOil:5000, airFilter:12000,brakeLiner:18000,tyre:30000},
+  "royal enfield|classic 350":{engineOil:5000,airFilter:12000,brakeLiner:18000,tyre:30000},
+  "royal enfield|bullet":    {engineOil:5000, airFilter:12000,brakeLiner:18000,tyre:30000},
+  // ── Maruti / small cars ──
+  "maruti suzuki|eeco":      {engineOil:10000,oilFilter:10000,airFilter:20000,fuelFilter:40000,cabinFilter:15000,coolant:90000,alignment:10000,brakeLiner:40000,clutch:80000,suspension:80000,tyre:40000,wiper:10000},
+  "maruti suzuki|alto":      {engineOil:10000,oilFilter:10000,airFilter:30000,cabinFilter:20000,coolant:60000,alignment:10000,brakeLiner:40000,clutch:80000,suspension:80000,tyre:50000,wiper:10000},
+  "maruti suzuki|swift":     {engineOil:10000,oilFilter:10000,airFilter:30000,cabinFilter:20000,coolant:60000,alignment:10000,brakeLiner:40000,clutch:80000,suspension:80000,tyre:50000,wiper:10000},
+  "maruti suzuki|wagon r":   {engineOil:10000,oilFilter:10000,airFilter:30000,cabinFilter:20000,coolant:60000,alignment:10000,brakeLiner:40000,clutch:80000,suspension:80000,tyre:50000,wiper:10000}
+};
+const _maintKeyMap=[["engineOil","Engine oil","Service"],["oilFilter","Oil Filter","Service"],["airFilter","Air filter","Service"],["fuelFilter","Fuel Filter","Service"],["cabinFilter","AC / Cabin filter","Service"],["coolant","Coolant","Service"],["alignment","Wheel alignment","Service"],["greasing","Greasing","Service"],["brakeLiner","Brake liner","Repair"],["brake","Brake","Repair"],["clutch","Clutch","Repair"],["suspension","Suspension","Repair"],["battery","Battery","Repair"],["tyre","Tyre","Repair"],["wiper","Wiper blades","Repair"],["defClog","DEF Clog issue","Repair"]];
+function modelMaintFor(make,model){ const mk=(make||"").trim().toLowerCase(), md=(model||"").trim().toLowerCase(); if(!mk||!md) return null; const k=mk+"|"+md; if(MODEL_MAINT[k]) return MODEL_MAINT[k]; for(const key of Object.keys(MODEL_MAINT)){ const [a,b]=key.split("|"); if(a===mk && (md.startsWith(b)||b.startsWith(md))) return MODEL_MAINT[key]; } return null; }
+function buildMaintItemsFromModel(intervals){ return _maintKeyMap.filter(([k])=>intervals[k]>0).map(([,name])=>({name,intervalKm:intervals[_maintKeyMap.find(x=>x[1]===name)[0]],lastKm:0})); }
 // Display normalisation: any legacy "Oil change" in existing vehicle docs reads as "Engine oil".
 const normMaintName=n=>{ if(!n)return n; const k=String(n).trim().toLowerCase(); return k==="oil change"?"Engine oil":n; };
 const MAINT_CAT={}; FLEET_DEFAULT_MAINT.forEach(([n,k,c])=>{ MAINT_CAT[n.toLowerCase()]=c||"Service"; }); MAINT_CAT.def="Service";
@@ -1490,7 +1549,7 @@ function openVehicle(v){
         <td data-label="Action" style="white-space:nowrap">${iv>0?`<button class="btn vMDone" data-item="${esc(mi.name)}" style="padding:4px 10px;font-size:11.5px;background:#E8F5EC;color:#1B873F;border:none;font-weight:700" title="Quick mark done @ ${km.toLocaleString("en-IN")} km">✓ Done</button> `:""}<button class="btn vMLog" data-item="${esc(mi.name)}" style="padding:4px 9px;font-size:11.5px" title="Open service form pre-filled">📝 Log</button></td>
       </tr>`; }).join("")}</table></div>`; }).join("")||`<div class="card loading">No items.</div>`}
     <div class="sec">EDIT INTERVALS</div>
-    <div style="font-size:11.5px;color:var(--soft);margin-bottom:8px">Set the km interval per item for this vehicle.</div>
+    <div style="display:flex;align-items:center;gap:9px;margin-bottom:8px;flex-wrap:wrap"><div style="font-size:11.5px;color:var(--soft);flex:1">Set the km interval per item for this vehicle.</div>${modelMaintFor(v.make,v.model)?`<button class="btn" id="mOEM" title="Re-seed intervals from the OEM service schedule for ${esc(v.make+" "+v.model)} (existing lastKm values are kept)" style="padding:5px 11px;font-size:11.5px;background:#FFF6DC;color:var(--brand-d);border:none;font-weight:700">📋 Apply ${esc(v.make)} ${esc(v.model)} schedule</button>`:`<span style="font-size:10.5px;color:var(--soft);font-style:italic">no OEM schedule on file for "${esc((v.make||"")+" "+(v.model||""))}"</span>`}</div>
     ${["Service","Repair"].map(cat=>{ const g=items.map((mi,i)=>({mi,i})).filter(o=>maintCatOf(o.mi.name)===cat); if(!g.length) return ""; return `<div style="font-size:11px;color:var(--brand-d);font-weight:800;margin:10px 0 4px;letter-spacing:.3px">${cat==="Service"?"🔧 SERVICE":"🛠️ REPAIR"}</div><div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(160px,1fr))">${g.map(({mi,i})=>`<div><div style="font-size:11px;color:var(--soft);margin-bottom:3px">${esc(mi.name)} every</div><div style="display:flex;gap:5px"><input type="number" class="mIv" data-i="${i}" value="${mi.intervalKm||""}" style="flex:1;padding:7px 9px;border:1px solid var(--line);border-radius:8px;font-size:12.5px"><button class="mIRm" data-i="${i}" title="Remove item" style="background:#FBEAE5;color:var(--danger);border:none;border-radius:8px;padding:0 9px;cursor:pointer">✕</button></div></div>`).join("")}</div>`; }).join("")}
     <div style="margin-top:14px;border-top:1px solid var(--line);padding-top:12px"><div style="font-size:11px;color:var(--soft);margin-bottom:5px;font-weight:700;letter-spacing:.3px">+ ADD CUSTOM ITEM</div><div style="display:flex;gap:7px;flex-wrap:wrap"><input type="text" id="mNewName" placeholder="Item name (e.g. Spark plug)" style="flex:2;min-width:140px;padding:7px 9px;border:1px solid var(--line);border-radius:8px;font-size:12.5px"><input type="number" id="mNewKm" placeholder="Interval km" style="width:120px;padding:7px 9px;border:1px solid var(--line);border-radius:8px;font-size:12.5px"><select id="mNewCat" style="padding:7px 9px;border:1px solid var(--line);border-radius:8px;font-size:12.5px"><option value="Service">Service</option><option value="Repair">Repair</option></select><button class="btn y" id="mAddItem">+ Add</button></div></div>
     <div style="text-align:right;margin-top:14px"><button class="btn y" id="mSave">Save intervals</button></div>`;
@@ -1536,13 +1595,26 @@ function openVehicle(v){
     m.querySelectorAll(".mIRm").forEach(b=>b.onclick=()=>{ const i=+b.dataset.i; if(!confirm(`Remove "${items[i].name}" from this vehicle's maintenance list?`)) return; items.splice(i,1); v.maintItems=items; saveMaintItems(v,items); });
     $("#mAddItem").onclick=()=>{ const nm=($("#mNewName").value||"").trim(); const ikm=parseInt($("#mNewKm").value)||0; const cat=$("#mNewCat").value; if(!nm){ alert("Enter item name"); return; } if(!ikm){ alert("Enter interval km"); return; } items.push({name:nm,intervalKm:ikm,lastKm:0}); MAINT_CAT[nm.toLowerCase()]=cat; v.maintItems=items; saveMaintItems(v,items); };
     $("#mSave").onclick=()=>{ document.querySelectorAll("#modal .mIv").forEach(inp=>{ const i=+inp.dataset.i; if(items[i]) items[i].intervalKm=parseInt(inp.value)||0; }); v.maintItems=items; saveMaintItems(v,items); };
+    { const ob=$("#mOEM"); if(ob) ob.onclick=()=>applyOEMSchedule(v); }
   }
 }
 async function saveMaintItems(v,items){ try{ await setDoc(doc(db,"fleet",v.id),{maintItems:items,updatedAt:Date.now()},{merge:true}); logAudit("vehicle",`Updated maintenance intervals for ${v.name||v.number}`); openVehicle(v); renderFleet(); }catch(e){ alert("Save failed: "+(e.message||e)); } }
+// Apply OEM-recommended intervals from MODEL_MAINT to a vehicle — preserves existing lastKm + any custom items not in the schedule.
+async function applyOEMSchedule(v){
+  const intervals=modelMaintFor(v.make,v.model); if(!intervals){ alert(`No OEM schedule on file for "${(v.make||"")+" "+(v.model||"")}"`); return; }
+  if(!confirm(`Apply OEM schedule for ${v.make} ${v.model}?\n\n• Replaces the km interval of every item the schedule covers.\n• Adds any missing items from the schedule.\n• Keeps your "last serviced @ km" history.\n• Custom items not in the schedule stay untouched.`)) return;
+  const cur=(v.maintItems||[]).slice();
+  const wanted=_maintKeyMap.filter(([k])=>intervals[k]>0).map(([k,name])=>({name,intervalKm:intervals[k]}));
+  const merged=cur.map(mi=>{ const w=wanted.find(x=>(x.name||"").toLowerCase()===(mi.name||"").toLowerCase()); return w?{...mi,intervalKm:w.intervalKm}:mi; });
+  wanted.forEach(w=>{ if(!merged.some(mi=>(mi.name||"").toLowerCase()===w.name.toLowerCase())) merged.push({...w,lastKm:0}); });
+  try{ await setDoc(doc(db,"fleet",v.id),{maintItems:merged,updatedAt:Date.now()},{merge:true}); logAudit("vehicle",`Applied OEM schedule (${v.make} ${v.model}) for ${v.name||v.number}`); v.maintItems=merged; openVehicle(v); renderFleet(); alert(`✓ OEM schedule applied — ${wanted.length} items synced.`); }catch(e){ alert("Save failed: "+(e.message||e)); }
+}
 // Full-page Add/Edit vehicle form (styled like Project Setup) — replaces the Fleet tab, not a modal.
 function vehicleForm(existing){
   const base=existing||{};
-  const _dfltMI=FLEET_DEFAULT_MAINT.map(([n,k])=>({name:n,intervalKm:k,lastKm:0}));
+  // If we know this make+model's OEM schedule, use it as defaults; otherwise fall back to generic FLEET_DEFAULT_MAINT.
+  const _modelInt=modelMaintFor(base.make,base.model);
+  const _dfltMI=_modelInt?buildMaintItemsFromModel(_modelInt):FLEET_DEFAULT_MAINT.map(([n,k])=>({name:n,intervalKm:k,lastKm:0}));
   const _haveMI=new Set((base.maintItems||[]).map(mi=>(mi.name||"").toLowerCase()));
   // DEF (AdBlue) is opt-in per vehicle via its own toggle, so keep it out of the standard interval list.
   const _defMI=(base.maintItems||[]).find(mi=>(mi.name||"").toLowerCase()==="def");

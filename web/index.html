@@ -11,6 +11,7 @@
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.17.0/dist/tabler-icons.min.css"/>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
@@ -140,17 +141,17 @@
   <div class="layout">
     <nav class="sidebar">
       <div class="nav-section">Main</div>
-      <div class="nav-item on" data-tab="overview"><span class="nav-ic">📊</span>Dashboard</div>
-      <div class="nav-item" data-tab="leaderboard"><span class="nav-ic">🏆</span>Leaderboard</div>
-      <div class="nav-item" data-tab="projects"><span class="nav-ic">🏢</span>Projects</div>
+      <div class="nav-item on" data-tab="overview"><span class="nav-ic"><i class="ti ti-layout-dashboard"></i></span>Dashboard</div>
+      <div class="nav-item" data-tab="leaderboard"><span class="nav-ic"><i class="ti ti-trophy"></i></span>Leaderboard</div>
+      <div class="nav-item" data-tab="projects"><span class="nav-ic"><i class="ti ti-building-store"></i></span>Projects</div>
       <div class="nav-section">Insights</div>
-      <div class="nav-item" data-tab="expenses"><span class="nav-ic">💰</span>Expenses</div>
-      <div class="nav-item" data-tab="gallery"><span class="nav-ic">🖼️</span>Gallery</div>
-      <div class="nav-item" data-tab="fleet"><span class="nav-ic">🚚</span>Fleet</div>
+      <div class="nav-item" data-tab="expenses"><span class="nav-ic"><i class="ti ti-wallet"></i></span>Expenses</div>
+      <div class="nav-item" data-tab="gallery"><span class="nav-ic"><i class="ti ti-photo"></i></span>Gallery</div>
+      <div class="nav-item" data-tab="fleet"><span class="nav-ic"><i class="ti ti-truck"></i></span>Fleet</div>
       <div class="nav-section hidden" id="admSec">Admin</div>
-      <div class="nav-item hidden" data-tab="access"><span class="nav-ic">👤</span>Managers</div>
+      <div class="nav-item hidden" data-tab="access"><span class="nav-ic"><i class="ti ti-users"></i></span>Managers</div>
       <div style="flex:1"></div>
-      <div class="nav-item" id="signout"><span class="nav-ic">🚪</span>Sign out</div>
+      <div class="nav-item" id="signout"><span class="nav-ic"><i class="ti ti-logout"></i></span>Sign out</div>
     </nav>
     <main class="main">
       <div id="rangebar" style="display:none;gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:16px"></div>

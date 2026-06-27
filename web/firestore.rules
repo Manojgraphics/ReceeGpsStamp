@@ -57,16 +57,24 @@ service cloud.firestore {
       allow read, write: if isManager();
     }
 
-    // Shared company fleet — managed on web + app (one source of truth). Any signed-in
-    // employee (surveyor app or manager web) may read/write the internal fleet.
+    // Shared company fleet — any signed-in employee may add/update a vehicle or log fuel/service,
+    // but the doc must look like a vehicle (has `number`); only managers may DELETE (blocks a
+    // team-wide wipe). On a merge-update `request.resource.data` is the post-merge doc, so the
+    // existing `number` keeps fuel/service log updates allowed.
     match /fleet/{id} {
-      allow read, write: if request.auth != null;
+      allow read:           if request.auth != null;
+      allow create, update: if request.auth != null && request.resource.data.number is string;
+      allow delete:         if isManager();
     }
 
-    // Shared project catalog (companies + distributors w/ creatives & media) — admin-managed,
-    // visible to every user. Any signed-in employee may read/write.
+    // Shared project catalog (companies + distributors w/ creatives & media) — any signed-in
+    // employee may upsert, but the JSON must be non-empty ("" =0 / "[]" =2 chars → rejected, so
+    // a client can't blank the team's catalog); only managers may DELETE.
     match /catalog/{doc} {
-      allow read, write: if request.auth != null;
+      allow read:           if request.auth != null;
+      allow create, update: if request.auth != null && request.resource.data.json is string
+                             && request.resource.data.json.size() > 2;
+      allow delete:         if isManager();
     }
 
     // Installation/approval workflow — admins/managers approve recce'd shops, track install

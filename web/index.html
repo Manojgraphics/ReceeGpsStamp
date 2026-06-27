@@ -561,6 +561,8 @@ function renderProjects(){
   if(_projView==="detail" && _projSel){ renderProjectDetail(_projSel); return; }
   const recces=fRecces(), exps=fExpenses(), shops=DATA.shops||[];
   const P={}; const get=p=>P[p]||(P[p]={project:p,company:"",shops:0,surveyed:0,interested:0,spend:0,surveyors:new Set()});
+  // Seed from the shared catalog so catalog-only distributors (not yet pushed to any field user) still show up.
+  (CATALOG.distributors||[]).forEach(d=>{ if(d&&d.name){ const g=get(d.name); if(d.companyName)g.company=d.companyName; } });
   shops.forEach(s=>{ const g=get(s.project||"General"); g.shops++; if(s.company)g.company=s.company; if(s.surveyor)g.surveyors.add(s.surveyor); });
   recces.forEach(r=>{ const g=get(r.project||"General"); g.surveyed++; if(r.status==="Interested")g.interested++; if(r.surveyor)g.surveyors.add(r.surveyor); });
   exps.filter(x=>x.kind==="EXPENSE"&&x.paymentMode!=="Company").forEach(x=>{ get(x.projectName||"General").spend+=x.amount||0; });

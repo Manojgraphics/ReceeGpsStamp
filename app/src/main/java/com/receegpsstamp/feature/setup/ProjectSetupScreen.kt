@@ -204,6 +204,7 @@ fun ProjectSetupScreen(
                         distributorName = distributorName,
                         creatives = creatives.size,
                         media = mediaTypes.size,
+                        stage = selectedDistributor?.stage ?: "",
                         onSetup = { page = "setup" },
                     )
 
@@ -332,7 +333,14 @@ fun ProjectSetupScreen(
 }
 
 @Composable
-private fun CurrentProjectCard(companyName: String, distributorName: String, creatives: Int, media: Int, onSetup: () -> Unit) {
+private fun CurrentProjectCard(companyName: String, distributorName: String, creatives: Int, media: Int, stage: String, onSetup: () -> Unit) {
+    val modeLabel = when (stage.lowercase()) {
+        "installation", "installdone" -> "🛠 Installation mode"
+        "recce", "reccedone" -> "📋 Recce mode"
+        else -> "📋 Recce mode" // default: recce
+    }
+    val modeBg = if (stage.lowercase().startsWith("install")) Color(0xFFE8F5EC) else Color(0xFFFFF6DC)
+    val modeFg = if (stage.lowercase().startsWith("install")) Color(0xFF1B873F) else AppYellowDark
     RgsCard(Modifier.clickable { onSetup() }) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Box(Modifier.size(40.dp).clip(RoundedCornerShape(11.dp)).background(SoftChipGradient), contentAlignment = Alignment.Center) {
@@ -340,7 +348,16 @@ private fun CurrentProjectCard(companyName: String, distributorName: String, cre
             }
             Spacer(Modifier.width(11.dp))
             Column(Modifier.weight(1f)) {
-                Text(distributorName.ifBlank { "Project" }, fontSize = 15.sp, fontWeight = FontWeight.Bold, color = NeutralText, maxLines = 1)
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(distributorName.ifBlank { "Project" }, fontSize = 15.sp, fontWeight = FontWeight.Bold, color = NeutralText, maxLines = 1, modifier = Modifier.weight(1f, fill = false))
+                    Spacer(Modifier.width(8.dp))
+                    // Mode chip — clear visual cue for Recce vs Installation
+                    Box(
+                        Modifier.clip(RoundedCornerShape(50)).background(modeBg).padding(horizontal = 9.dp, vertical = 3.dp),
+                    ) {
+                        Text(modeLabel, fontSize = 10.5.sp, fontWeight = FontWeight.Bold, color = modeFg)
+                    }
+                }
                 Text(
                     listOfNotNull(companyName.ifBlank { null }, "$creatives creatives", "$media media").joinToString(" · "),
                     fontSize = 11.5.sp, color = NeutralTextSoft, maxLines = 1,

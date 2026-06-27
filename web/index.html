@@ -1438,7 +1438,7 @@ function renderSetup(){
   const catCre=[...new Set([].concat(...(CATALOG.companies||[]).map(c=>c.creatives||[]),(DATA&&DATA.allCreatives)||[]))];
   $("#setup").innerHTML=`
     ${projSubnav('setup')}
-    <div class="sec" style="display:flex;align-items:center;gap:10px;max-width:780px">⚙ PROJECT SETUP<button class="btn" id="suCat" style="margin-left:auto;text-transform:none;letter-spacing:0">✚ Manage catalog</button></div>
+    <div class="sec" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;max-width:780px">⚙ PROJECT SETUP<div style="margin-left:auto;display:flex;gap:6px;flex-wrap:wrap"><button class="btn" id="suAddDist" style="text-transform:none;letter-spacing:0">➕ Distributor</button><button class="btn" id="suAddCre" style="text-transform:none;letter-spacing:0">➕ Creative</button><button class="btn" id="suAddMed" style="text-transform:none;letter-spacing:0">➕ Media</button><button class="btn" id="suCat" style="text-transform:none;letter-spacing:0">✚ Manage catalog</button></div></div>
     <div class="card" style="max-width:780px">
       <div class="suLbl">Company</div>
       <input type="text" id="suComp" list="compListS" placeholder="e.g. Dollar" class="suInp">
@@ -1522,6 +1522,9 @@ function renderSetup(){
   $("#suFile").onchange=e=>{ const f=e.target.files[0]; if(!f) return; const r=new FileReader(); r.onload=()=>{ const t=$("#suShops"); t.value=(t.value.trim()?t.value.trim()+"\n":"")+String(r.result||"").trim(); }; r.readAsText(f); };
   $("#suGo").onclick=doSetupAssign;
   $("#suCat").onclick=openCatalogManager;
+  $("#suAddDist").onclick=()=>quickCatalog("dist");
+  $("#suAddCre").onclick=()=>quickCatalog("creative");
+  $("#suAddMed").onclick=()=>quickCatalog("media");
   // Assign an existing catalog project (company + creatives/media) to a field user — decoupled from setup.
   $("#apGo").onclick=async()=>{
     const did=$("#apProj").value, uid=$("#apSur").value;
@@ -1553,6 +1556,30 @@ function renderSetup(){
     </div>`; }).join("") : `<div class="card loading">No shops yet — add via Bulk shops above.</div>`;
 }
 // Catalog manager — admin adds/removes Companies, their Creatives & Media types, and Distributors (shared).
+// Quick single add to the shared catalog — Distributor / Creative / Media (focused dialog).
+async function quickCatalog(kind){
+  let comps=[], dists=[];
+  try{ const cc=await getDoc(doc(db,"catalog","companies")), cd=await getDoc(doc(db,"catalog","distributors")); comps=JSON.parse((cc.exists()&&cc.data().json)||"[]"); dists=JSON.parse((cd.exists()&&cd.data().json)||"[]"); }catch(e){}
+  const save=async()=>{ const now=Date.now(); await setDoc(doc(db,"catalog","companies"),{json:JSON.stringify(comps),updatedAt:now},{merge:true}); await setDoc(doc(db,"catalog","distributors"),{json:JSON.stringify(dists),updatedAt:now},{merge:true}); CATALOG={companies:comps,distributors:dists}; };
+  const title=kind==="dist"?"➕ Add Distributor":kind==="creative"?"➕ Add Creative":"➕ Add Media type";
+  const m=$("#modal"); m.classList.remove("hidden");
+  m.innerHTML=`<div class="modalbox"><h3 style="margin:0 0 10px">${title}</h3>
+    <div style="font-size:11px;color:var(--soft);margin-bottom:3px">Company</div>
+    <input type="text" id="qcComp" list="qcCompList" placeholder="Company name" class="suInp" style="margin-bottom:10px"><datalist id="qcCompList">${comps.map(c=>`<option value="${esc(c.name)}"></option>`).join("")}</datalist>
+    ${kind==="dist"?`<input type="text" id="qcName" placeholder="Distributor name" class="suInp" style="margin-bottom:8px"><input type="text" id="qcCity" placeholder="City" class="suInp" style="margin-bottom:8px"><input type="tel" id="qcContact" placeholder="Contact (10-digit)" class="suInp" style="margin-bottom:8px">`:`<input type="text" id="qcName" placeholder="${kind==="creative"?"Creative / brand name":"Media type (e.g. Standee, Glow sign)"}" class="suInp" style="margin-bottom:8px">`}
+    <div style="text-align:right;margin-top:10px"><button class="btn" id="qcCancel">Cancel</button> <button class="btn y" id="qcSave">Add</button></div></div>`;
+  m.onclick=ev=>{ if(ev.target===m) m.classList.add("hidden"); }; $("#qcCancel").onclick=()=>m.classList.add("hidden");
+  $("#qcSave").onclick=async()=>{
+    const co=($("#qcComp").value||"").trim(); if(!co){ alert("Enter or pick a company."); return; }
+    let comp=comps.find(c=>(c.name||"").toLowerCase()===co.toLowerCase());
+    if(!comp){ comp={id:fleetRid(),name:co,creatives:[],mediaTypes:[],userId:"",createdAt:Date.now()}; comps.push(comp); }
+    const name=($("#qcName").value||"").trim();
+    if(kind==="dist"){ if(!name){ alert("Enter the distributor name."); return; } dists.push({id:fleetRid(),name,city:($("#qcCity").value||"").trim(),contact:($("#qcContact").value||"").replace(/\D/g,"").slice(0,10),companyId:comp.id,companyName:comp.name,userId:"",createdAt:Date.now()}); logAudit("setup",`Added distributor ${name} (${co})`); }
+    else if(kind==="creative"){ if(!name){ alert("Enter the creative."); return; } comp.creatives=comp.creatives||[]; if(!comp.creatives.some(x=>x.toLowerCase()===name.toLowerCase())) comp.creatives.push(name); logAudit("setup",`Added creative ${name} → ${co}`); }
+    else { if(!name){ alert("Enter the media type."); return; } comp.mediaTypes=comp.mediaTypes||[]; if(!comp.mediaTypes.some(x=>x.toLowerCase()===name.toLowerCase())) comp.mediaTypes.push(name); logAudit("setup",`Added media ${name} → ${co}`); }
+    try{ await save(); alert("Added ✓ — shared with every user's app after sync."); m.classList.add("hidden"); renderSetup(); }catch(e){ alert("Could not save: "+(e.message||e)); }
+  };
+}
 async function openCatalogManager(){
   let comps=[], dists=[];
   try{ const cc=await getDoc(doc(db,"catalog","companies")), cd=await getDoc(doc(db,"catalog","distributors")); comps=JSON.parse((cc.exists()&&cc.data().json)||"[]"); dists=JSON.parse((cd.exists()&&cd.data().json)||"[]"); }catch(e){}

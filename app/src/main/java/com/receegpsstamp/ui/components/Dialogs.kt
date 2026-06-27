@@ -62,38 +62,6 @@ fun AddItemDialog(
 }
 
 @Composable
-fun EditCompanyDialog(
-    company: Company,
-    onDismiss: () -> Unit,
-    onSave: (Company) -> Unit,
-    onDelete: (() -> Unit)? = null,
-) {
-    var name by remember { mutableStateOf(company.name) }
-
-    Dialog(onDismissRequest = onDismiss) {
-        Column(
-            Modifier.clip(RoundedCornerShape(14.dp)).background(NeutralSurface).padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp),
-        ) {
-            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                Text("Edit Company", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = NeutralText, modifier = Modifier.weight(1f))
-                if (onDelete != null) {
-                    Text("Delete", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = StatusError, modifier = Modifier.clickable { onDelete() }.padding(4.dp))
-                }
-            }
-            CompactTextField(label = "Company name", value = name, onValueChange = { name = it }, placeholder = "Company name")
-            Spacer(Modifier.height(2.dp))
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                SecondaryButton(label = "Cancel", onClick = onDismiss, modifier = Modifier.weight(1f))
-                PrimaryButton(text = "Save", onClick = {
-                    if (name.isNotBlank()) { onSave(company.copy(name = name.trim())); onDismiss() }
-                }, modifier = Modifier.weight(1f))
-            }
-        }
-    }
-}
-
-@Composable
 fun EditDistributorDialog(
     distributor: com.receegpsstamp.data.model.Distributor,
     companies: List<Company>,
@@ -156,31 +124,6 @@ fun EditDistributorDialog(
                         ))
                         onDismiss()
                     }
-                }, modifier = Modifier.weight(1f))
-            }
-        }
-    }
-}
-
-@Composable
-fun AddCompanyDialog(
-    onDismiss: () -> Unit,
-    onSave: (name: String) -> Unit,
-) {
-    var name by remember { mutableStateOf("") }
-
-    Dialog(onDismissRequest = onDismiss) {
-        Column(
-            Modifier.clip(RoundedCornerShape(14.dp)).background(NeutralSurface).padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp),
-        ) {
-            Text("Add Company", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = NeutralText)
-            CompactTextField(label = "Company name", value = name, onValueChange = { name = it }, placeholder = "e.g. Dollar Industries")
-            Spacer(Modifier.height(2.dp))
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                SecondaryButton(label = "Cancel", onClick = onDismiss, modifier = Modifier.weight(1f))
-                PrimaryButton(text = "Save", onClick = {
-                    if (name.isNotBlank()) { onSave(name.trim()); onDismiss() }
                 }, modifier = Modifier.weight(1f))
             }
         }

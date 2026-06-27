@@ -186,10 +186,6 @@ class AppViewModel @Inject constructor(
         selectionStore.hasAutoSelectedDistributor = true
     }
 
-    fun addCompany(name: String) {
-        localStore.addCompany(Company(name = name, userId = userId))
-    }
-
     fun addDistributor(name: String, city: String, companyId: String, companyName: String, contact: String) {
         val id = localStore.addDistributor(
             Distributor(name = name, city = city, contact = contact, companyId = companyId, companyName = companyName, userId = userId),
@@ -614,25 +610,6 @@ class AppViewModel @Inject constructor(
             }
             localStore.deleteDistributor(distributorId)
             notify("Project deleted")
-        }
-    }
-
-    /** Permanently removes a company plus every project (distributor), shop, recce & photo under it. */
-    fun deleteCompany(companyId: String) {
-        val s = state.value
-        val distIds = s.distributors.filter { it.companyId == companyId }.map { it.id }.toSet()
-        viewModelScope.launch(safe) {
-            s.allRecces.filter { it.distributorId in distIds }
-                .flatMap { it.shopPhotos + it.media.flatMap { m -> m.photos } }.distinct()
-                .forEach { try { java.io.File(it).delete() } catch (_: Throwable) { /* best-effort */ } }
-            if (_selectedCompanyId.value == companyId) {
-                _selectedCompanyId.value = null
-                selectionStore.hasAutoSelectedCompany = false
-                _selectedDistributorId.value = null
-                selectionStore.hasAutoSelectedDistributor = false
-            }
-            localStore.deleteCompany(companyId)
-            notify("Company deleted")
         }
     }
 

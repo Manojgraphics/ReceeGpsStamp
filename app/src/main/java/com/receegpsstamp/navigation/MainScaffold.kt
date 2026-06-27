@@ -468,9 +468,6 @@ fun MainScaffold(onNavigate: (String) -> Unit, appViewModel: AppViewModel = hilt
                         selectedDistributor = appState.selectedDistributor,
                         onSelectCompany = { appViewModel.selectCompany(it) },
                         onSelectDistributor = { appViewModel.selectDistributor(it) },
-                        onAddCompany = { name -> appViewModel.addCompany(name) },
-                        onUpdateCompany = { appViewModel.updateCompany(it) },
-                        onDeleteCompany = { appViewModel.deleteCompany(it) },
                         onAddDistributor = { name, city, companyId, companyName, contact ->
                             appViewModel.addDistributor(name, city, companyId, companyName, contact)
                         },

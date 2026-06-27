@@ -59,10 +59,8 @@ import com.receegpsstamp.data.model.Company
 import com.receegpsstamp.data.model.Distributor
 import com.receegpsstamp.data.model.InstallEntry
 import com.receegpsstamp.data.model.Shop
-import com.receegpsstamp.ui.components.AddCompanyDialog
 import com.receegpsstamp.ui.components.AddDistributorDialog
 import com.receegpsstamp.ui.components.AddItemDialog
-import com.receegpsstamp.ui.components.EditCompanyDialog
 import com.receegpsstamp.ui.components.EditDistributorDialog
 import com.receegpsstamp.ui.components.CompactDropdown
 import com.receegpsstamp.ui.components.PrimaryButton
@@ -86,9 +84,6 @@ fun ProjectSetupScreen(
     onSelectDistributor: (String) -> Unit = {},
     selectedCompany: Company? = null,
     selectedDistributor: Distributor? = null,
-    onAddCompany: (name: String) -> Unit = {},
-    onUpdateCompany: (Company) -> Unit = {},
-    onDeleteCompany: (String) -> Unit = {},
     onAddDistributor: (name: String, city: String, companyId: String, companyName: String, contact: String) -> Unit = { _, _, _, _, _ -> },
     onUpdateDistributor: (Distributor) -> Unit = {},
     onDeleteDistributor: (String) -> Unit = {},
@@ -110,55 +105,17 @@ fun ProjectSetupScreen(
 ) {
     var creativesOpen by remember { mutableStateOf(false) }
     var mediaOpen by remember { mutableStateOf(false) }
-    var showCompanyDialog by remember { mutableStateOf(false) }
     var showDistDialog by remember { mutableStateOf(false) }
     var showAddCreative by remember { mutableStateOf(false) }
     var showAddMediaType by remember { mutableStateOf(false) }
     var companyDropdownOpen by remember { mutableStateOf(false) }
     var distributorDropdownOpen by remember { mutableStateOf(false) }
-    var showEditCompany by remember { mutableStateOf(false) }
     var showEditDistributor by remember { mutableStateOf(false) }
-    var deleteCompanyConfirm by remember { mutableStateOf(false) }
     var deleteDistConfirm by remember { mutableStateOf(false) }
     var showAddShop by remember { mutableStateOf(false) }
     var editShop by remember { mutableStateOf<Shop?>(null) }
     var showImportShops by remember { mutableStateOf(false) }
     var workMode by remember { mutableStateOf("recce") }   // "recce" | "install"
-
-    if (deleteCompanyConfirm && selectedCompany != null) {
-        val distCount = distributors.count { it.companyId == selectedCompany.id }
-        if (distCount > 0) {
-            // Block — a company can only be deleted once it has no distributors left.
-            androidx.compose.material3.AlertDialog(
-                onDismissRequest = { deleteCompanyConfirm = false },
-                title = { Text("Can't delete company", fontWeight = FontWeight.Bold) },
-                text = {
-                    Text(
-                        "\"${selectedCompany.name}\" still has $distCount distributor${if (distCount > 1) "s" else ""}. " +
-                            "Delete them first, then you can delete the company.",
-                        fontSize = 13.sp,
-                    )
-                },
-                confirmButton = {
-                    Text("OK", color = AppYellowDark, fontWeight = FontWeight.Bold,
-                        modifier = Modifier.clickable { deleteCompanyConfirm = false }.padding(8.dp))
-                },
-            )
-        } else {
-            androidx.compose.material3.AlertDialog(
-                onDismissRequest = { deleteCompanyConfirm = false },
-                title = { Text("Delete company?", fontWeight = FontWeight.Bold) },
-                text = { Text("Deletes \"${selectedCompany.name}\". Can't be undone.", fontSize = 13.sp) },
-                confirmButton = {
-                    Text("Delete company", color = StatusError, fontWeight = FontWeight.Bold,
-                        modifier = Modifier.clickable { onDeleteCompany(selectedCompany.id); deleteCompanyConfirm = false }.padding(8.dp))
-                },
-                dismissButton = {
-                    Text("Cancel", color = NeutralTextSoft, modifier = Modifier.clickable { deleteCompanyConfirm = false }.padding(8.dp))
-                },
-            )
-        }
-    }
 
     if (deleteDistConfirm && selectedDistributor != null) {
         androidx.compose.material3.AlertDialog(
@@ -180,26 +137,12 @@ fun ProjectSetupScreen(
         )
     }
 
-    if (showCompanyDialog) {
-        AddCompanyDialog(
-            onDismiss = { showCompanyDialog = false },
-            onSave = onAddCompany,
-        )
-    }
     if (showDistDialog) {
         AddDistributorDialog(
             onDismiss = { showDistDialog = false },
             companies = companies,
             preselectCompany = selectedCompany,
             onSave = onAddDistributor,
-        )
-    }
-    if (showEditCompany && selectedCompany != null) {
-        EditCompanyDialog(
-            company = selectedCompany,
-            onDismiss = { showEditCompany = false },
-            onSave = onUpdateCompany,
-            onDelete = { showEditCompany = false; deleteCompanyConfirm = true },
         )
     }
     if (showEditDistributor && selectedDistributor != null) {
@@ -314,7 +257,7 @@ fun ProjectSetupScreen(
                 value = companyName.ifEmpty { "Select company…" },
                 expanded = companyDropdownOpen,
                 onToggle = { companyDropdownOpen = !companyDropdownOpen },
-                onEdit = if (selectedCompany != null) {{ showEditCompany = true }} else null,
+                onEdit = null, // company add/edit/delete is manager-only (web "Manage catalog")
             ) {
                 companies.forEach { co ->
                     DropdownMenuItem(
@@ -325,11 +268,6 @@ fun ProjectSetupScreen(
                         },
                     )
                 }
-                DropdownMenuItem(
-                    text = { Text("Add new company", fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = AppYellowDark) },
-                    leadingIcon = { Icon(RgsIcons.Add, null, tint = AppYellowDark, modifier = Modifier.size(18.dp)) },
-                    onClick = { companyDropdownOpen = false; showCompanyDialog = true },
-                )
             }
 
             SectionHeader("DISTRIBUTOR")

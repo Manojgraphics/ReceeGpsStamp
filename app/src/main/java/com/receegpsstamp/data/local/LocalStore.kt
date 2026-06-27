@@ -167,11 +167,27 @@ class LocalStore @Inject constructor(
         vehicleType = db.vehicleType.orEmpty(),
     )
 
-    /** Adds any missing seed companies and backfills their default creatives / media types. */
+    /** Stable, device-independent id for a seed company — same name → same id everywhere, so seeds
+     *  can't duplicate across devices once they merge through the shared catalog. */
+    private fun seedCompanyId(name: String) = "seed-" + name.trim().lowercase().replace(Regex("[^a-z0-9]+"), "-").trim('-')
+
+    /** Adds any missing seed companies and backfills their default creatives / media types. Also
+     *  migrates older seed companies from a random per-device id to the stable [seedCompanyId]. */
     private fun seed(db: Db): Db {
-        val names = db.companies.map { it.name }.toSet()
+        // Migrate existing seed companies to their stable id, remapping distributors that point at the old id.
+        val idFix = HashMap<String, String>()
+        val reIded = db.companies.map { c ->
+            if (seedCreatives.containsKey(c.name)) {
+                val stable = seedCompanyId(c.name)
+                if (c.id != stable) { idFix[c.id] = stable; c.copy(id = stable) } else c
+            } else c
+        }
+        val distributors = if (idFix.isEmpty()) db.distributors
+            else db.distributors.map { d -> idFix[d.companyId]?.let { d.copy(companyId = it) } ?: d }
+
+        val names = reIded.map { it.name }.toSet()
         // Backfill default creatives / media types for existing seed companies that still have none.
-        val existing = db.companies.map { c ->
+        val existing = reIded.map { c ->
             var u = c
             seedCreatives[c.name]?.let { if (it.isNotEmpty() && u.creatives.isEmpty()) u = u.copy(creatives = it) }
             seedMediaTypes[c.name]?.let { if (it.isNotEmpty() && u.mediaTypes.isEmpty()) u = u.copy(mediaTypes = it) }
@@ -180,12 +196,12 @@ class LocalStore @Inject constructor(
         // Add any seed companies that aren't present yet, so they're always pre-filled.
         val missing = seedCreatives.filterKeys { it !in names }.map { (name, creatives) ->
             Company(
-                id = UUID.randomUUID().toString(), name = name,
+                id = seedCompanyId(name), name = name,
                 creatives = creatives, mediaTypes = seedMediaTypes[name] ?: emptyList(),
                 createdAt = System.currentTimeMillis(),
             )
         }
-        return db.copy(companies = existing + missing)
+        return db.copy(companies = existing + missing, distributors = distributors)
     }
 
     /** Preserves an unreadable data file (instead of silently starting blank) so it can be recovered. */

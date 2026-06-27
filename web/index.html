@@ -213,7 +213,7 @@ const ago = ms => { if(!ms) return "—"; const d=Date.now()-ms; if(d<3600000) r
 const today = ()=> new Date().toISOString().slice(0,10);
 const accessRef = ()=> doc(db,"config","access");
 
-let DATA=null, ROLE=null, TARGETS={}, APPROVALS={}, INSTALL={}, DISABLED={}; const urlCache=new Map();
+let DATA=null, ROLE=null, TARGETS={}, APPROVALS={}, INSTALL={}, DISABLED={}, HIDDEN_UIDS=new Set(); const urlCache=new Map();
 let CATALOG={companies:[],distributors:[]};   // shared admin-managed catalog (for dynamic Creative/Media)
 let FLEET=[];   // shared company vehicles (loaded for the Dashboard fleet card)
 const apprState=(uid,eid)=>(((APPROVALS[uid]||{}).statuses||{})[eid]||{}).state||"pending";
@@ -225,6 +225,10 @@ const fRecces=()=>DATA.recces.filter(x=>inRange(x.date));
 const fExpenses=()=>DATA.expenses.filter(x=>inRange(x.date));
 const fSurveyors=()=>{ const r=fRecces(),e=fExpenses(); return DATA.surveyors.map(s=>{ const sr=r.filter(x=>x.uid===s.uid),se=e.filter(x=>x.uid===s.uid);
   return {...s, surveyed:sr.length, interested:sr.filter(x=>x.status==="Interested").length, spent:sum(se.filter(x=>x.kind==="EXPENSE"&&x.paymentMode!=="Company")), advance:sum(se.filter(x=>x.kind==="ADVANCE"))}; }); };
+// Hide duplicate / stale Firebase UIDs (one user signed in twice = two accounts). Doesn't disable login — just suppresses from dashboard lists.
+const isHidden=uid=>HIDDEN_UIDS.has(uid);
+const fSurveyorsVisible=()=>fSurveyors().filter(s=>!isHidden(s.uid));
+async function setHidden(uid,hide){ try{ if(hide) HIDDEN_UIDS.add(uid); else HIDDEN_UIDS.delete(uid); await setDoc(doc(db,"config","hidden"),{uids:[...HIDDEN_UIDS],updatedAt:Date.now()},{merge:true}); logAudit("hidden",`${hide?"Hid":"Unhid"} field user ${(((DATA&&DATA.surveyors)||[]).find(s=>s.uid===uid)||{}).name||uid}`); rerenderActive(); }catch(e){ alert("Save failed: "+(e.message||e)); } }
 function startOf(unit){ const d=new Date(); d.setHours(0,0,0,0);
   if(unit==="week"){ const day=(d.getDay()+6)%7; d.setDate(d.getDate()-day); } else if(unit==="month"){ d.setDate(1); }
   return d.getTime(); }
@@ -332,6 +336,7 @@ async function load(){
     try{ const cc=await getDoc(doc(db,"catalog","companies")), cd=await getDoc(doc(db,"catalog","distributors")); CATALOG={companies:JSON.parse((cc.exists()&&cc.data().json)||"[]"),distributors:JSON.parse((cd.exists()&&cd.data().json)||"[]")}; }catch(e){ CATALOG={companies:[],distributors:[]}; }
     try{ const fl=await getDocs(collection(db,"fleet")); FLEET=fl.docs.map(d=>({id:d.id,...d.data()})); }catch(e){ FLEET=[]; }
     try{ const dis=await getDoc(doc(db,"config","disabled")); DISABLED=(dis.exists()&&dis.data())||{}; }catch(e){ DISABLED={}; }
+    try{ const h=await getDoc(doc(db,"config","hidden")); HIDDEN_UIDS=new Set(((h.exists()&&h.data().uids)||[])); }catch(e){ HIDDEN_UIDS=new Set(); }
     $("#status").classList.add("hidden");
     renderRangeBar(); renderOverview(); renderExpenses();
   }catch(e){
@@ -374,7 +379,7 @@ const stat=(l,v,cls="")=>`<div class="card stat ${cls}"><div class="v">${v}</div
 // Project lifecycle badge (from the app: "" Active | RecceDone | InstallDone).
 const stageBadge=p=>{ const s=((DATA&&DATA.projStage)||{})[p]; return s==="InstallDone"?` <span style="font-size:9.5px;font-weight:700;color:#fff;background:#2E7D32;padding:1px 7px;border-radius:7px;vertical-align:middle">✓ Installation Done</span>`:s==="RecceDone"?` <span style="font-size:9.5px;font-weight:700;color:#fff;background:#E6A91E;padding:1px 7px;border-radius:7px;vertical-align:middle">Recce Done</span>`:""; };
 function renderOverview(){
-  const surveyors=fSurveyors(), recces=fRecces(), exps=fExpenses();
+  const surveyors=fSurveyorsVisible(), recces=fRecces(), exps=fExpenses();
   const totalShops=(DATA.shops||[]).length, surveyed=recces.length;
   const interested=recces.filter(r=>r.status==="Interested").length, notInt=recces.filter(r=>r.status==="Not Interested").length,
     revisit=recces.filter(r=>r.status==="Revisit").length, closed=recces.filter(r=>r.status==="Closed").length;
@@ -398,7 +403,7 @@ function renderOverview(){
   const dists=Object.values(PJ).filter(g=>g.project!=="General").map(g=>{ const inst=instByProj[g.project]||{}; const prog=g.shops?Math.round(g.surveyed*100/g.shops):0; return {project:g.project,company:g.company,shops:g.shops,surveyed:g.surveyed,installed:inst.installed||0,prog}; }).sort((a,b)=>b.shops-a.shops);
   const distCity=name=>{ const d=(CATALOG.distributors||[]).find(x=>(x.name||"").toLowerCase()===(name||"").toLowerCase()); return (d&&d.city)||""; };
   const statusPill=p=> p>=70?["On track","#1B873F","#E8F5EC"] : p>=40?["In progress","#B8890C","#FFF6DC"] : p>=10?["Slow","#C8472E","#FBEAE5"] : ["Just started","#5C615F","#EEF0F2"];
-  const staleUsers=DATA.surveyors.filter(s=>s.lastActive&&(Date.now()-s.lastActive)>=3*86400000).sort((a,b)=>a.lastActive-b.lastActive);
+  const staleUsers=DATA.surveyors.filter(s=>!isHidden(s.uid)&&s.lastActive&&(Date.now()-s.lastActive)>=3*86400000).sort((a,b)=>a.lastActive-b.lastActive);
   const noPhoto=recces.filter(r=>!r.photos.length).length, noGps=recces.filter(r=>!(r.lat&&r.lng)).length;
   const hr=new Date().getHours(), greet=hr<12?"Good morning":hr<17?"Good afternoon":"Good evening";
   const myName=(auth.currentUser&&(auth.currentUser.displayName||(auth.currentUser.email||"").split("@")[0]))||"there";
@@ -480,7 +485,7 @@ function renderOverview(){
 
 // ── Leaderboard ──
 function renderLeaderboard(){
-  const list=fSurveyors().filter(s=>s.surveyed>0||TARGETS[s.uid]).sort((a,b)=>b.surveyed-a.surveyed||b.interested-a.interested);
+  const list=fSurveyorsVisible().filter(s=>s.surveyed>0||TARGETS[s.uid]).sort((a,b)=>b.surveyed-a.surveyed||b.interested-a.interested);
   const medal=["🥇","🥈","🥉"];
   $("#leaderboard").innerHTML=`
     ${perfSubnav('leaderboard')}
@@ -541,7 +546,7 @@ function exportSurveyor(uid){
 
 // ── Weekly report PDF ──
 function weeklyPdf(){
-  const sv=fSurveyors().sort((a,b)=>b.surveyed-a.surveyed), r=fRecces(), e=fExpenses();
+  const sv=fSurveyorsVisible().sort((a,b)=>b.surveyed-a.surveyed), r=fRecces(), e=fExpenses();
   const surveyed=r.length, interested=r.filter(x=>x.status==="Interested").length, conv=surveyed?Math.round(interested*100/surveyed):0;
   const spent=sum(e.filter(x=>x.kind==="EXPENSE"&&x.paymentMode!=="Company"));
   const d=new window.jspdf.jsPDF();
@@ -732,7 +737,7 @@ function renderExpenses(){
   const isFine=c=>(c||"").toLowerCase().includes("fine")||(c||"").toLowerCase().includes("police");
   const catIcon=c=>({Fuel:"⛽",Hotel:"🏨",Food:"🍱",Toll:"🛣️","Police Fine":"🚓","Police fine":"🚓",Travel:"🚌",Driver:"🧑‍✈️","Daily wages":"💵",Parking:"🅿️",Misc:"💼",Other:"💼"}[c]||"🧾");
   const canApprove=(ROLE==="admin"||ROLE==="manager");
-  const bySur={}; e.filter(x=>(!_expDist||x.projectName===_expDist)).forEach(x=>{ const s=bySur[x.uid]=bySur[x.uid]||{uid:x.uid,name:x.surveyor,adv:0,sp:0}; if(x.kind==="ADVANCE")s.adv+=x.amount||0; else if(x.paymentMode!=="Company")s.sp+=x.amount||0; });
+  const bySur={}; e.filter(x=>(!_expDist||x.projectName===_expDist)&&!isHidden(x.uid)).forEach(x=>{ const s=bySur[x.uid]=bySur[x.uid]||{uid:x.uid,name:x.surveyor,adv:0,sp:0}; if(x.kind==="ADVANCE")s.adv+=x.amount||0; else if(x.paymentMode!=="Company")s.sp+=x.amount||0; });
   const catCard=(c,a)=>`<div class="card" style="padding:13px 15px"><div style="font-size:20px">${catIcon(c)}</div><div style="font-size:21px;font-weight:800;margin-top:5px;color:${isFine(c)?'var(--danger)':'var(--ink)'}">${money(a)}</div><div style="font-size:11px;color:var(--soft)">${esc(c)}</div></div>`;
   const tab=(k,l)=>`<button class="exTab" data-t="${k}" style="border:none;background:${_expTab===k?'var(--brand)':'transparent'};color:${_expTab===k?'var(--brand-text)':'var(--soft)'};border-radius:50px;padding:6px 16px;font-size:13px;font-weight:700;cursor:pointer">${l}</button>`;
   $("#expenses").innerHTML=`
@@ -798,29 +803,34 @@ function openLedger(uid){
 }
 
 // ── Field Team — roster of field users + per-user ledger (khata) ──
+let _tmShowHidden=false;
 function renderTeam(){
-  const surs=fSurveyors().slice().sort((a,b)=>(b.lastActive||0)-(a.lastActive||0));
+  const all=fSurveyors().slice().sort((a,b)=>(b.lastActive||0)-(a.lastActive||0));
+  const visible=all.filter(s=>!isHidden(s.uid)), hiddenList=all.filter(s=>isHidden(s.uid));
+  const surs=_tmShowHidden?all:visible;
   const now=Date.now();
   const lastTxt=ms=>{ if(!ms) return '<span style="color:var(--soft)">never</span>'; const d=Math.floor((now-ms)/86400000); const s=d<=0?"today":d===1?"1 day ago":d+" days ago"; return `<span style="color:${d>=3?'var(--danger)':'var(--soft)'}">${s}</span>`; };
   const ms2=(l,v,c)=>`<div><div style="font-size:13.5px;font-weight:800;${c?'color:'+c:''}">${v}</div><div style="font-size:9px;color:var(--soft)">${l}</div></div>`;
   $("#team").innerHTML=`
-    <div class="sec">👷 FIELD TEAM · ${surs.length}${RANGE.label!=="All time"?" · "+esc(RANGE.label):""}</div>
-    <div class="filters" style="margin-bottom:10px"><input type="text" id="tmSearch" placeholder="Search name / mobile…" style="flex:1;max-width:300px"></div>
+    <div class="sec">👷 FIELD TEAM · ${visible.length}${hiddenList.length?` · ${hiddenList.length} hidden`:""}${RANGE.label!=="All time"?" · "+esc(RANGE.label):""}</div>
+    <div class="filters" style="margin-bottom:10px"><input type="text" id="tmSearch" placeholder="Search name / mobile…" style="flex:1;max-width:300px">${hiddenList.length||_tmShowHidden?`<button class="btn ${_tmShowHidden?'y':''}" id="tmTogHid" title="Toggle showing hidden / duplicate users">${_tmShowHidden?"👁 Hide hidden":"👁 Show hidden ("+hiddenList.length+")"}</button>`:""}</div>
     <div id="tmList"></div>`;
   const draw=()=>{
     const q=($("#tmSearch").value||"").trim().toLowerCase();
     const list=surs.filter(s=>!q||(s.name||"").toLowerCase().includes(q)||(s.mobile||"").includes(q));
-    $("#tmList").innerHTML = list.length ? `<div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(280px,1fr))">`+list.map(s=>{ const bal=(s.advance||0)-(s.spent||0);
-      return `<div class="card">
-        <div style="display:flex;align-items:center;gap:8px"><b style="font-size:14.5px;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(s.name)}</b>${s.mobile?`<a href="tel:${esc(s.mobile)}" style="color:var(--brand-d);font-size:12px;text-decoration:none;white-space:nowrap">📞 ${esc(s.mobile)}</a>`:""}</div>
+    $("#tmList").innerHTML = list.length ? `<div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(280px,1fr))">`+list.map(s=>{ const bal=(s.advance||0)-(s.spent||0), hidden=isHidden(s.uid);
+      return `<div class="card" style="${hidden?'opacity:.6;border:1px dashed var(--line)':''}">
+        <div style="display:flex;align-items:center;gap:8px"><b style="font-size:14.5px;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(s.name)}${hidden?' <span style="font-size:10px;color:var(--soft);font-weight:700;letter-spacing:.4px">· HIDDEN</span>':""}</b>${s.mobile?`<a href="tel:${esc(s.mobile)}" style="color:var(--brand-d);font-size:12px;text-decoration:none;white-space:nowrap">📞 ${esc(s.mobile)}</a>`:""}</div>
         <div style="font-size:11.5px;color:var(--soft);margin-top:3px">Last active: ${lastTxt(s.lastActive)} · ${s.projects||0} projects · ${s.stores||0} shops · <span title="login id (UID)">id ${esc((s.uid||"").slice(0,6))}</span></div>
         <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-top:9px;text-align:center">${ms2("Surveyed",s.surveyed||0)}${ms2("Interested",s.interested||0)}${ms2("Advance",money(s.advance||0))}${ms2(bal>=0?"Balance":"Over",money(Math.abs(bal)),bal<0?"var(--danger)":"")}</div>
-        <div style="display:flex;gap:6px;margin-top:10px"><button class="btn y tmLed" data-uid="${esc(s.uid)}" style="flex:1;padding:6px;font-size:11.5px">🧾 Ledger</button><button class="btn tmDet" data-uid="${esc(s.uid)}" style="flex:1;padding:6px;font-size:11.5px">Details</button></div>
+        <div style="display:flex;gap:6px;margin-top:10px"><button class="btn y tmLed" data-uid="${esc(s.uid)}" style="flex:1;padding:6px;font-size:11.5px">🧾 Ledger</button><button class="btn tmDet" data-uid="${esc(s.uid)}" style="flex:1;padding:6px;font-size:11.5px">Details</button><button class="btn tmHide" data-uid="${esc(s.uid)}" style="padding:6px 10px;font-size:11.5px;${hidden?'background:#FFF6DC;color:var(--brand-d)':'background:#FBEAE5;color:var(--danger)'}" title="${hidden?"Unhide (show this user in all dashboard lists)":"Hide this user (duplicate / wrong account) from all dashboard lists"}">${hidden?"👁 Unhide":"🚫 Hide"}</button></div>
       </div>`; }).join("")+`</div>`
       : `<div class="card loading">No field users${q?" match.":" yet."}</div>`;
     $("#tmList").querySelectorAll(".tmLed").forEach(b=>b.onclick=()=>openLedger(b.dataset.uid));
     $("#tmList").querySelectorAll(".tmDet").forEach(b=>b.onclick=()=>openSurveyor(b.dataset.uid));
+    $("#tmList").querySelectorAll(".tmHide").forEach(b=>b.onclick=()=>{ const uid=b.dataset.uid, was=isHidden(uid); if(!was && !confirm(`Hide this user from all dashboard lists?\n\nThis is for duplicate / wrong-number accounts. It does NOT disable their app login — use the user detail's "Disable login" for that. You can unhide any time from this tab.`)) return; setHidden(uid, !was); });
   };
+  { const t=$("#tmTogHid"); if(t) t.onclick=()=>{ _tmShowHidden=!_tmShowHidden; renderTeam(); }; }
   $("#tmSearch").oninput=draw; draw();
 }
 
@@ -1565,7 +1575,7 @@ async function installPdf(recces, scope){
 // ── Project Setup (admin/manager) — Company → Creative → Media → Assign, pushed to a field user's app ──
 let _suCo="", _suDist="";
 function renderSetup(){
-  const surs=(DATA&&DATA.surveyors)||[];
+  const surs=((DATA&&DATA.surveyors)||[]).filter(s=>!isHidden(s.uid));
   const comps=(CATALOG.companies||[]).slice().sort((a,b)=>(a.name||"").localeCompare(b.name||""));
   if(!comps.length){ $("#setup").innerHTML=`<div style="font-size:18px;font-weight:800;margin-bottom:6px">Project Setup</div><div style="color:var(--soft);font-size:13px;margin-bottom:14px">No companies yet.</div><button class="btn y" id="suNewCo">+ New company</button>`; $("#suNewCo").onclick=newCompanyDialog; return; }
   if(!_suCo || !comps.some(c=>c.name===_suCo)) _suCo=comps[0].name;
@@ -1658,7 +1668,7 @@ async function removeCompanyItem(coName,field,value){ try{ const {comps,dists}=a
 async function setStage(distId,stage){ if(!distId)return; try{ const {comps,dists}=await loadCat(); const i=dists.findIndex(d=>d.id===distId); if(i<0)return; dists[i].stage=stage; await saveCatalog(comps,dists); logAudit("setup",`Set ${dists[i].name} → ${stage}`); renderSetup(); }catch(e){ alert("Save failed: "+(e.message||e)); } }
 async function removeDistributor(distId){ if(!distId)return; const d=(CATALOG.distributors||[]).find(x=>x.id===distId); if(!d)return; if(!confirm(`Remove distributor "${d.name}"? (This only removes it from the shared catalog; shops already pushed to field users stay.)`))return; try{ const {comps,dists}=await loadCat(); await saveCatalog(comps, dists.filter(x=>x.id!==distId)); _suDist=""; logAudit("setup",`Removed distributor ${d.name}`); renderSetup(); }catch(e){ alert("Save failed: "+(e.message||e)); } }
 function newCompanyDialog(){ const m=$("#modal"); m.classList.remove("hidden"); m.innerHTML=`<div class="modalbox"><h3 style="margin:0 0 10px">+ New company</h3><input type="text" id="ncName" placeholder="Company name" class="suInp" autofocus><div style="text-align:right;margin-top:12px"><button class="btn" id="ncCancel">Cancel</button> <button class="btn y" id="ncSave">Add</button></div></div>`; m.onclick=ev=>{ if(ev.target===m) m.classList.add("hidden"); }; $("#ncCancel").onclick=()=>m.classList.add("hidden"); $("#ncSave").onclick=async()=>{ const n=($("#ncName").value||"").trim(); if(!n){ alert("Enter a name"); return; } try{ const {comps,dists}=await loadCat(); if(comps.some(c=>(c.name||"").toLowerCase()===n.toLowerCase())){ alert("Already exists"); return; } comps.push({id:fleetRid(),name:n,creatives:[],mediaTypes:[],userId:"",createdAt:Date.now()}); await saveCatalog(comps,dists); logAudit("setup",`Added company ${n}`); _suCo=n; _suDist=""; m.classList.add("hidden"); renderSetup(); }catch(e){ alert("Save failed: "+(e.message||e)); } }; }
-function importShopsDialog(dist){ if(!dist){ alert("Pick a distributor first"); return; } const surs=(DATA&&DATA.surveyors)||[]; const m=$("#modal"); m.classList.remove("hidden"); m.innerHTML=`<div class="modalbox"><h3 style="margin:0 0 4px">📊 Import shops · ${esc(dist.name)}</h3><div style="font-size:12px;color:var(--soft);margin-bottom:10px">Shops are pushed to a specific field user's app. Format per line: <b>name, city, mobile</b></div><div class="filters"><select id="imSur" style="flex:1;min-width:200px"><option value="">Choose field user…</option>${surs.map(s=>`<option value="${esc(s.uid)}">${esc(s.name)}</option>`).join("")}</select><button class="btn" id="imFileBtn">⬆ Upload CSV</button><input type="file" id="imFile" accept=".csv,.txt,text/csv,text/plain" style="display:none"></div><textarea id="imText" placeholder="Ramesh Store, Jalgaon, 9876543210&#10;Shree Garments, Bhusawal" class="suInp" style="min-height:140px;resize:vertical;margin-top:10px"></textarea><div style="text-align:right;margin-top:12px"><button class="btn" id="imCancel">Cancel</button> <button class="btn y" id="imGo">Import</button></div></div>`; m.onclick=ev=>{ if(ev.target===m) m.classList.add("hidden"); }; $("#imCancel").onclick=()=>m.classList.add("hidden"); $("#imFileBtn").onclick=()=>$("#imFile").click(); $("#imFile").onchange=e=>{ const f=e.target.files[0]; if(!f)return; const r=new FileReader(); r.onload=()=>{ const t=$("#imText"); t.value=(t.value.trim()?t.value.trim()+"\n":"")+String(r.result||"").trim(); }; r.readAsText(f); }; $("#imGo").onclick=async()=>{ const uid=$("#imSur").value; if(!uid){ alert("Choose a field user"); return; } const lines=$("#imText").value.split("\n").map(l=>l.trim()).filter(Boolean); if(!lines.length){ alert("Paste or upload some shops"); return; } const incoming=lines.map(l=>{ const p=l.split(",").map(x=>x.trim()); return {id:rid(),name:p[0]||"",city:p[1]||"",contact:(p[2]||"").replace(/\D/g,"").slice(0,10),company:dist.companyName||"",project:dist.name||""}; }).filter(s=>s.name); try{ const r=doc(db,"assignments",uid), d=await getDoc(r), data=(d.exists()&&d.data())||{}; const curS=data.shops||[]; const seen=new Set(curS.map(s=>(s.name||"").toLowerCase()+"|"+(s.project||"").toLowerCase())); const addS=incoming.filter(s=>!seen.has(s.name.toLowerCase()+"|"+(s.project||"").toLowerCase())); await setDoc(r,{shops:[...curS,...addS],updatedAt:Date.now()},{merge:true}); const uname=(($("#imSur").selectedOptions[0]||{}).text)||uid; logAudit("setup",`Imported ${addS.length} shop(s) for ${dist.name} → ${uname}`); m.classList.add("hidden"); alert(`Imported ${addS.length} shop(s) ✓ · will appear in ${uname}'s app after sync.`); }catch(e){ alert("Import failed: "+(e.message||e)); } }; }
+function importShopsDialog(dist){ if(!dist){ alert("Pick a distributor first"); return; } const surs=((DATA&&DATA.surveyors)||[]).filter(s=>!isHidden(s.uid)); const m=$("#modal"); m.classList.remove("hidden"); m.innerHTML=`<div class="modalbox"><h3 style="margin:0 0 4px">📊 Import shops · ${esc(dist.name)}</h3><div style="font-size:12px;color:var(--soft);margin-bottom:10px">Shops are pushed to a specific field user's app. Format per line: <b>name, city, mobile</b></div><div class="filters"><select id="imSur" style="flex:1;min-width:200px"><option value="">Choose field user…</option>${surs.map(s=>`<option value="${esc(s.uid)}">${esc(s.name)}</option>`).join("")}</select><button class="btn" id="imFileBtn">⬆ Upload CSV</button><input type="file" id="imFile" accept=".csv,.txt,text/csv,text/plain" style="display:none"></div><textarea id="imText" placeholder="Ramesh Store, Jalgaon, 9876543210&#10;Shree Garments, Bhusawal" class="suInp" style="min-height:140px;resize:vertical;margin-top:10px"></textarea><div style="text-align:right;margin-top:12px"><button class="btn" id="imCancel">Cancel</button> <button class="btn y" id="imGo">Import</button></div></div>`; m.onclick=ev=>{ if(ev.target===m) m.classList.add("hidden"); }; $("#imCancel").onclick=()=>m.classList.add("hidden"); $("#imFileBtn").onclick=()=>$("#imFile").click(); $("#imFile").onchange=e=>{ const f=e.target.files[0]; if(!f)return; const r=new FileReader(); r.onload=()=>{ const t=$("#imText"); t.value=(t.value.trim()?t.value.trim()+"\n":"")+String(r.result||"").trim(); }; r.readAsText(f); }; $("#imGo").onclick=async()=>{ const uid=$("#imSur").value; if(!uid){ alert("Choose a field user"); return; } const lines=$("#imText").value.split("\n").map(l=>l.trim()).filter(Boolean); if(!lines.length){ alert("Paste or upload some shops"); return; } const incoming=lines.map(l=>{ const p=l.split(",").map(x=>x.trim()); return {id:rid(),name:p[0]||"",city:p[1]||"",contact:(p[2]||"").replace(/\D/g,"").slice(0,10),company:dist.companyName||"",project:dist.name||""}; }).filter(s=>s.name); try{ const r=doc(db,"assignments",uid), d=await getDoc(r), data=(d.exists()&&d.data())||{}; const curS=data.shops||[]; const seen=new Set(curS.map(s=>(s.name||"").toLowerCase()+"|"+(s.project||"").toLowerCase())); const addS=incoming.filter(s=>!seen.has(s.name.toLowerCase()+"|"+(s.project||"").toLowerCase())); await setDoc(r,{shops:[...curS,...addS],updatedAt:Date.now()},{merge:true}); const uname=(($("#imSur").selectedOptions[0]||{}).text)||uid; logAudit("setup",`Imported ${addS.length} shop(s) for ${dist.name} → ${uname}`); m.classList.add("hidden"); alert(`Imported ${addS.length} shop(s) ✓ · will appear in ${uname}'s app after sync.`); }catch(e){ alert("Import failed: "+(e.message||e)); } }; }
 // Catalog manager — admin adds/removes Companies, their Creatives & Media types, and Distributors (shared).
 // Quick single add to the shared catalog — Distributor / Creative / Media (focused dialog).
 async function quickCatalog(kind){

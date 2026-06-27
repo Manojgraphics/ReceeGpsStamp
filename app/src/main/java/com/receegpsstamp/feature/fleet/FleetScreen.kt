@@ -85,28 +85,52 @@ fun FleetScreen(
     onBack: () -> Unit,
 ) {
     var selectedId by remember { mutableStateOf<String?>(null) }
+    var maintenanceId by remember { mutableStateOf<String?>(null) }
     val selected = vehicles.find { it.id == selectedId }
+    val maintFor = vehicles.find { it.id == maintenanceId }
 
     var fuelFor by remember { mutableStateOf<Vehicle?>(null) }
     var svcFor by remember { mutableStateOf<Vehicle?>(null) }
 
-    BackHandler(enabled = selected != null) { selectedId = null }
+    BackHandler(enabled = selected != null || maintFor != null) {
+        when {
+            maintFor != null -> maintenanceId = null
+            selected != null -> selectedId = null
+        }
+    }
 
     Column(Modifier.fillMaxSize().background(NeutralBg).navigationBarsPadding()) {
         RgsTopBar(
-            if (selected != null) selected.name.ifBlank { selected.number }.ifBlank { "Vehicle" } else "Fleet Manage",
-            onNav = { if (selected != null) selectedId = null else onBack() },
+            when {
+                maintFor != null -> "Maintenance · ${maintFor.name.ifBlank { maintFor.number }.ifBlank { "Vehicle" }}"
+                selected != null -> selected.name.ifBlank { selected.number }.ifBlank { "Vehicle" }
+                else -> "Fleet Manage"
+            },
+            onNav = {
+                when {
+                    maintFor != null -> maintenanceId = null
+                    selected != null -> selectedId = null
+                    else -> onBack()
+                }
+            },
         )
-        if (selected == null) {
-            FleetList(vehicles, fuelLogs, onOpen = { selectedId = it.id })
-        } else {
-            VehicleDetail(
+        when {
+            maintFor != null -> MaintenanceDetail(
+                maintFor,
+                fuelLogs.filter { it.vehicleId == maintFor.id },
+                serviceLogs.filter { it.vehicleId == maintFor.id },
+                onService = { svcFor = maintFor },
+                onDeleteService = onDeleteService,
+            )
+            selected != null -> VehicleDetail(
                 selected,
                 fuelLogs.filter { it.vehicleId == selected.id },
                 serviceLogs.filter { it.vehicleId == selected.id },
-                onFuel = { fuelFor = selected }, onService = { svcFor = selected },
-                onDeleteFuel = onDeleteFuel, onDeleteService = onDeleteService,
+                onFuel = { fuelFor = selected },
+                onOpenMaintenance = { maintenanceId = selected.id },
+                onDeleteFuel = onDeleteFuel,
             )
+            else -> FleetList(vehicles, fuelLogs, onOpen = { selectedId = it.id })
         }
     }
 
@@ -166,12 +190,12 @@ private fun VehicleCard(v: Vehicle, fuel: List<FuelLog>, onClick: () -> Unit) {
     }
 }
 
-// ── Detail ──
+// ── Detail — main vehicle screen: Documents + Fuel only (Maintenance moved to its own screen) ──
 @Composable
 private fun VehicleDetail(
     v: Vehicle, fuel: List<FuelLog>, service: List<ServiceLog>,
-    onFuel: () -> Unit, onService: () -> Unit,
-    onDeleteFuel: (String) -> Unit, onDeleteService: (String) -> Unit,
+    onFuel: () -> Unit, onOpenMaintenance: () -> Unit,
+    onDeleteFuel: (String) -> Unit,
 ) {
     val st = statusOf(v, fuel)
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(12.dp)) {
@@ -183,20 +207,38 @@ private fun VehicleDetail(
             }
         }
         Spacer(Modifier.height(10.dp))
-        SecLabel("MAINTENANCE")
-        st.items.forEach { DueRow(it) }
-
-        Spacer(Modifier.height(10.dp))
         SecLabel("DOCUMENTS")
         DocRow("Insurance", st.insDays)
         DocRow("PUC", st.pucDays)
         if (needsFitness(v)) DocRow("Fitness", st.fitDays)
 
         Spacer(Modifier.height(12.dp))
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            FleetBtn("⛽ Add fuel", Modifier.weight(1f), filled = true, onFuel)
-            FleetBtn("🔧 Add service", Modifier.weight(1f), filled = false, onService)
+        // Maintenance & Service — single tap card → opens its own screen.
+        val pendingMaint = st.items.count { it.recorded && it.remainingKm <= 500 }
+        val overdueMaint = st.items.count { it.recorded && it.remainingKm <= 0 }
+        RgsCard(Modifier.fillMaxWidth().clickable { onOpenMaintenance() }) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Box(Modifier.size(40.dp).clip(RoundedCornerShape(11.dp)).background(SoftChipGradient), contentAlignment = Alignment.Center) {
+                    Text("🛠", fontSize = 18.sp)
+                }
+                Spacer(Modifier.width(11.dp))
+                Column(Modifier.weight(1f)) {
+                    Text("Maintenance & Service", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = NeutralText)
+                    val sub = when {
+                        overdueMaint > 0 -> "⚠ $overdueMaint overdue · ${service.size} past services"
+                        pendingMaint > 0 -> "$pendingMaint due soon · ${service.size} past services"
+                        st.items.isEmpty() -> "Open to set service intervals"
+                        else -> "${st.items.size} items tracked · ${service.size} past services"
+                    }
+                    val subCol = if (overdueMaint > 0) StatusError else if (pendingMaint > 0) WarnAmber else NeutralTextSoft
+                    Text(sub, fontSize = 11.5.sp, color = subCol)
+                }
+                Text("›", fontSize = 22.sp, color = NeutralTextSoft, modifier = Modifier.padding(end = 4.dp))
+            }
         }
+
+        Spacer(Modifier.height(12.dp))
+        FleetBtn("⛽ Add fuel", Modifier.fillMaxWidth(), filled = true, onFuel)
 
         if (fuel.isNotEmpty()) {
             Spacer(Modifier.height(14.dp)); SecLabel("FUEL HISTORY")
@@ -204,6 +246,39 @@ private fun VehicleDetail(
                 LogRow("⛽ ${f.odometer} km · %.1f L".format(f.litres), money(f.amount), dateFmt.format(Date(f.date))) { onDeleteFuel(f.id) }
             }
         }
+        Spacer(Modifier.height(20.dp))
+    }
+}
+
+// ── Maintenance & Service — its own screen (opened from VehicleDetail) ──
+@Composable
+private fun MaintenanceDetail(
+    v: Vehicle, fuel: List<FuelLog>, service: List<ServiceLog>,
+    onService: () -> Unit, onDeleteService: (String) -> Unit,
+) {
+    val st = statusOf(v, fuel)
+    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(12.dp)) {
+        RgsCard(Modifier.fillMaxWidth()) {
+            Row {
+                Stat("Odometer", "${v.currentKm} km", Modifier.weight(1f))
+                Stat("Mileage", if (st.economy > 0) "%.1f km/l".format(st.economy) else "—", Modifier.weight(1f))
+                Stat("Items", "${st.items.size}", Modifier.weight(1f))
+            }
+        }
+        Spacer(Modifier.height(10.dp))
+        SecLabel("MAINTENANCE")
+        if (st.items.isEmpty()) {
+            Text(
+                "No service intervals set yet — admin can set them on the web dashboard (Manage vehicles).",
+                fontSize = 12.5.sp, color = NeutralTextSoft, modifier = Modifier.padding(8.dp),
+            )
+        } else {
+            st.items.forEach { DueRow(it) }
+        }
+
+        Spacer(Modifier.height(12.dp))
+        FleetBtn("🔧 Add service", Modifier.fillMaxWidth(), filled = true, onService)
+
         if (service.isNotEmpty()) {
             Spacer(Modifier.height(14.dp)); SecLabel("SERVICE HISTORY")
             service.sortedByDescending { it.date }.forEach { s ->

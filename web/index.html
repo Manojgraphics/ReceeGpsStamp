@@ -203,6 +203,7 @@ const $ = s => document.querySelector(s);
 const money = n => "₹" + Math.round(n||0).toLocaleString("en-IN");
 const esc = s => (s==null?"":String(s)).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
 const fmtDate = ms => ms ? new Date(ms).toLocaleDateString("en-IN",{day:"2-digit",month:"short",year:"numeric"}) : "—";
+const fmtYM = y => { if(!y) return ""; const m=String(y).match(/^(\d{4})-(\d{2})$/); return m ? new Date(+m[1],+m[2]-1,1).toLocaleDateString("en-IN",{month:"short",year:"numeric"}) : String(y); }; // "2022-03"→"Mar 2022"; plain year stays
 const ago = ms => { if(!ms) return "—"; const d=Date.now()-ms; if(d<3600000) return Math.max(1,Math.floor(d/60000))+"m ago"; if(d<86400000) return Math.floor(d/3600000)+"h ago"; return Math.floor(d/86400000)+"d ago"; };
 const today = ()=> new Date().toISOString().slice(0,10);
 const accessRef = ()=> doc(db,"config","access");
@@ -978,7 +979,7 @@ function openVehicle(v){
   const m=$("#modal"); m.classList.remove("hidden");
   m.innerHTML=`<div class="modalbox">
     <div style="display:flex;align-items:center;gap:10px"><h3 style="margin:0">🚗 ${esc(v.name||v.number||"Vehicle")}</h3>${ec?`<span style="color:var(--brand-d);font-weight:700">${ec.toFixed(1)} km/l</span>`:""}</div>
-    <div style="font-size:12px;color:var(--soft)">${[esc(v.number||""),esc([v.make,v.model].filter(Boolean).join(" ")),v.year?String(v.year):"",esc(v.type||""),`${km} km`].filter(Boolean).join(" · ")}</div>
+    <div style="font-size:12px;color:var(--soft)">${[esc(v.number||""),esc([v.make,v.model].filter(Boolean).join(" ")),esc(fmtYM(v.year)),esc(v.type||""),`${km} km`].filter(Boolean).join(" · ")}</div>
     ${(v.chassis||v.engine||(v.lat&&v.lng))?`<div class="tablewrap" style="margin-top:8px"><table><tr><th>Chassis</th><th>Engine</th><th>Last location</th></tr><tr><td>${esc(v.chassis||"—")}</td><td>${esc(v.engine||"—")}</td><td>${(v.lat&&v.lng)?`<a href="https://maps.google.com/?q=${v.lat},${v.lng}" target="_blank">📍 Map</a>`:"—"}</td></tr></table></div>`:""}
     <div class="sec">MAINTENANCE</div>
     <div class="tablewrap"><table><tr><th>Item</th><th>Interval</th><th>Last @</th><th>Status</th></tr>
@@ -1023,7 +1024,7 @@ function vehicleForm(existing){
       <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px;margin-top:14px">
         <div><div class="suLbl">Company / Make</div><input type="text" id="fMake" class="suInp" placeholder="Tata, Bajaj…" value="${esc(base.make||"")}"></div>
         <div><div class="suLbl">Model</div><input type="text" id="fModel" class="suInp" placeholder="Ace / Maxima" value="${esc(base.model||"")}"></div>
-        <div><div class="suLbl">Year</div><input type="number" id="fYear" class="suInp" placeholder="2022" value="${base.year||""}"></div>
+        <div><div class="suLbl">Month &amp; Year</div><input type="month" id="fYear" class="suInp" value="${/^\d{4}-\d{2}$/.test(String(base.year||""))?base.year:(base.year?String(base.year)+"-01":"")}"></div>
       </div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:14px">
         <div><div class="suLbl">Chassis no</div><input type="text" id="fChassis" class="suInp" value="${esc(base.chassis||"")}"></div>
@@ -1057,7 +1058,7 @@ function vehicleForm(existing){
     const newItems=items.map(mi=>({name:mi.name,intervalKm:mi.intervalKm||0,lastKm:mi.lastKm||0}));
     document.querySelectorAll(".fIv").forEach(inp=>{ const i=+inp.dataset.i; if(newItems[i]) newItems[i].intervalKm=parseInt(inp.value)||0; });
     const id=existing?existing.id:fleetRid();
-    const payload={ number, name, make:$("#fMake").value.trim(), model:$("#fModel").value.trim(), year:parseInt($("#fYear").value)||0,
+    const payload={ number, name, make:$("#fMake").value.trim(), model:$("#fModel").value.trim(), year:$("#fYear").value||"",
       chassis:$("#fChassis").value.trim().toUpperCase(), engine:$("#fEngine").value.trim().toUpperCase(),
       type:$("#fType").value, currentKm:parseInt($("#fKm").value)||base.currentKm||0,
       maintItems:newItems, insuranceExpiry:dms("fIns"), pucExpiry:dms("fPuc"), fitnessExpiry:typeNeedsFitness($("#fType").value)?dms("fFit"):0,
